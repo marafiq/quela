@@ -429,7 +429,8 @@ public class MergeBuilder :
         sql.Append(" USING ");
         if (_sourceQuery != null)
         {
-            sql.Append($"({_sourceQuery.ToSql()}) AS [{_sourceAlias}]");
+            var subSql = IncorporateSubquery(_sourceQuery);
+            sql.Append($"({subSql}) AS [{_sourceAlias}]");
         }
         else if (_sourceTable != null)
         {
@@ -521,4 +522,34 @@ public class MergeBuilder :
     }
 
     public string ToSql() => Build().Sql;
+
+    private string IncorporateSubquery(IQuery subquery)
+    {
+        var result = subquery.Build();
+        var sql = result.Sql;
+
+        // Use two-pass approach to avoid overlapping replacements
+        var paramList = result.Parameters.Keys
+            .Where(k => k.StartsWith("@p"))
+            .Select(k => (Key: k, Num: int.TryParse(k.Substring(2), out var n) ? n : -1))
+            .OrderByDescending(x => x.Num)
+            .ToList();
+
+        // First pass: replace with temporary placeholders
+        var tempPrefix = $"__temp_{Guid.NewGuid():N}_";
+        foreach (var (oldKey, _) in paramList)
+        {
+            sql = sql.Replace(oldKey, tempPrefix + oldKey);
+        }
+
+        // Second pass: replace temp placeholders with new names (lowest numbers first for correct ordering)
+        foreach (var (oldKey, _) in paramList.OrderBy(x => x.Num))
+        {
+            var newKey = $"@p{_paramIndex++}";
+            _params[newKey] = result.Parameters[oldKey];
+            sql = sql.Replace(tempPrefix + oldKey, newKey);
+        }
+
+        return sql;
+    }
 }

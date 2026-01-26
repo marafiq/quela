@@ -91,7 +91,9 @@ public static class Sql
     /// </summary>
     public static Condition Exists(IQuery subquery)
     {
-        return new Condition($"EXISTS ({subquery.ToSql()})");
+        var result = subquery.Build();
+        var inheritedParams = new Dictionary<string, object?>(result.Parameters);
+        return new Condition($"EXISTS ({result.Sql})", inheritedParams);
     }
 
     /// <summary>
@@ -99,7 +101,9 @@ public static class Sql
     /// </summary>
     public static Condition NotExists(IQuery subquery)
     {
-        return new Condition($"NOT EXISTS ({subquery.ToSql()})");
+        var result = subquery.Build();
+        var inheritedParams = new Dictionary<string, object?>(result.Parameters);
+        return new Condition($"NOT EXISTS ({result.Sql})", inheritedParams);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -167,23 +171,30 @@ public class SubqueryComparison<T>
         _operator = @operator;
     }
 
+    private static Condition CreateCondition(Column<T> col, SubqueryComparison<T> sub, string op)
+    {
+        var result = sub._subquery.Build();
+        var inheritedParams = new Dictionary<string, object?>(result.Parameters);
+        return new Condition($"{col.FullName} {op} {sub._operator} ({result.Sql})", inheritedParams);
+    }
+
     public static Condition operator >(Column<T> col, SubqueryComparison<T> sub)
-        => new($"{col.FullName} > {sub._operator} ({sub._subquery.ToSql()})");
+        => CreateCondition(col, sub, ">");
 
     public static Condition operator <(Column<T> col, SubqueryComparison<T> sub)
-        => new($"{col.FullName} < {sub._operator} ({sub._subquery.ToSql()})");
+        => CreateCondition(col, sub, "<");
 
     public static Condition operator >=(Column<T> col, SubqueryComparison<T> sub)
-        => new($"{col.FullName} >= {sub._operator} ({sub._subquery.ToSql()})");
+        => CreateCondition(col, sub, ">=");
 
     public static Condition operator <=(Column<T> col, SubqueryComparison<T> sub)
-        => new($"{col.FullName} <= {sub._operator} ({sub._subquery.ToSql()})");
+        => CreateCondition(col, sub, "<=");
 
     public static Condition operator ==(Column<T> col, SubqueryComparison<T> sub)
-        => new($"{col.FullName} = {sub._operator} ({sub._subquery.ToSql()})");
+        => CreateCondition(col, sub, "=");
 
     public static Condition operator !=(Column<T> col, SubqueryComparison<T> sub)
-        => new($"{col.FullName} <> {sub._operator} ({sub._subquery.ToSql()})");
+        => CreateCondition(col, sub, "<>");
 
     public override bool Equals(object? obj) => obj is SubqueryComparison<T> other && _subquery == other._subquery;
     public override int GetHashCode() => _subquery.GetHashCode();

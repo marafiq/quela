@@ -136,11 +136,19 @@ public static class SubqueryColumnExtensions
     /// Creates an IN (subquery) condition.
     /// </summary>
     public static Condition In<T>(this Column<T> col, IQuery subquery)
-        => new($"{col.FullName} IN ({subquery.ToSql()})");
+    {
+        var result = subquery.Build();
+        var inheritedParams = new Dictionary<string, object?>(result.Parameters);
+        return new Condition($"{col.FullName} IN ({result.Sql})", inheritedParams);
+    }
 
     /// <summary>
     /// Creates a NOT IN (subquery) condition.
     /// </summary>
     public static Condition NotIn<T>(this Column<T> col, IQuery subquery)
-        => new($"{col.FullName} NOT IN ({subquery.ToSql()})");
+    {
+        var result = subquery.Build();
+        var inheritedParams = new Dictionary<string, object?>(result.Parameters);
+        return new Condition($"{col.FullName} NOT IN ({result.Sql})", inheritedParams);
+    }
 }

@@ -153,13 +153,30 @@ public class InsertBuilder : IInsertInto, IInsertColumns, IInsertValues, IInsert
         {
             sql.Append(" ");
             var selectResult = _selectQuery.Build();
-            sql.Append(selectResult.Sql);
-            // Merge parameters from select query
-            foreach (var param in selectResult.Parameters)
+            var selectSql = selectResult.Sql;
+
+            // Remap parameter names to avoid collisions using two-pass approach
+            var paramList = selectResult.Parameters.Keys
+                .Where(k => k.StartsWith("@p"))
+                .Select(k => (Key: k, Num: int.TryParse(k.Substring(2), out var n) ? n : -1))
+                .OrderByDescending(x => x.Num)
+                .ToList();
+
+            // First pass: replace with temporary placeholders (highest numbers first to avoid substring issues)
+            var tempPrefix = $"__temp_{Guid.NewGuid():N}_";
+            foreach (var (oldKey, _) in paramList)
+            {
+                selectSql = selectSql.Replace(oldKey, tempPrefix + oldKey);
+            }
+
+            // Second pass: replace temp placeholders with new names (lowest numbers first for correct ordering)
+            foreach (var (oldKey, _) in paramList.OrderBy(x => x.Num))
             {
                 var newKey = $"@p{_paramIndex++}";
-                _params[newKey] = param.Value;
+                _params[newKey] = selectResult.Parameters[oldKey];
+                selectSql = selectSql.Replace(tempPrefix + oldKey, newKey);
             }
+            sql.Append(selectSql);
         }
         else if (_rows.Count > 0)
         {

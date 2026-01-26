@@ -48,6 +48,15 @@ internal class QueryBuilder<T> :
         _ctes.Add(cteSql);
     }
 
+    internal void InjectParameters(Dictionary<string, object?> parameters, int nextIndex)
+    {
+        foreach (var kvp in parameters)
+        {
+            _params[kvp.Key] = kvp.Value;
+        }
+        _paramIndex = nextIndex;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // FROM
     // ═══════════════════════════════════════════════════════════════════════════
@@ -66,9 +75,7 @@ internal class QueryBuilder<T> :
 
     internal IFrom<T> From(IQuery subquery, string alias)
     {
-        var subSql = subquery.ToSql();
-        var subParams = subquery.Build().Parameters;
-        MergeParameters(subParams);
+        var subSql = IncorporateSubquery(subquery);
         _from.Add($"({subSql}) AS [{alias}]");
         return this;
     }
@@ -117,24 +124,21 @@ internal class QueryBuilder<T> :
 
     public IJoin<T> Join(IQuery subquery, string alias)
     {
-        var subSql = subquery.ToSql();
-        MergeParameters(subquery.Build().Parameters);
+        var subSql = IncorporateSubquery(subquery);
         _joins.Add($"INNER JOIN ({subSql}) AS [{alias}]");
         return this;
     }
 
     public IJoin<T> LeftJoin(IQuery subquery, string alias)
     {
-        var subSql = subquery.ToSql();
-        MergeParameters(subquery.Build().Parameters);
+        var subSql = IncorporateSubquery(subquery);
         _joins.Add($"LEFT OUTER JOIN ({subSql}) AS [{alias}]");
         return this;
     }
 
     public IJoin<T> RightJoin(IQuery subquery, string alias)
     {
-        var subSql = subquery.ToSql();
-        MergeParameters(subquery.Build().Parameters);
+        var subSql = IncorporateSubquery(subquery);
         _joins.Add($"RIGHT OUTER JOIN ({subSql}) AS [{alias}]");
         return this;
     }
@@ -157,16 +161,14 @@ internal class QueryBuilder<T> :
 
     public IFrom<T> CrossApply(IQuery subquery, string alias)
     {
-        var subSql = subquery.ToSql();
-        MergeParameters(subquery.Build().Parameters);
+        var subSql = IncorporateSubquery(subquery);
         _joins.Add($"CROSS APPLY ({subSql}) AS [{alias}]");
         return this;
     }
 
     public IFrom<T> OuterApply(IQuery subquery, string alias)
     {
-        var subSql = subquery.ToSql();
-        MergeParameters(subquery.Build().Parameters);
+        var subSql = IncorporateSubquery(subquery);
         _joins.Add($"OUTER APPLY ({subSql}) AS [{alias}]");
         return this;
     }
@@ -193,16 +195,14 @@ internal class QueryBuilder<T> :
 
     public ICondition<T> WhereExists(IQuery subquery)
     {
-        var subSql = subquery.ToSql();
-        MergeParameters(subquery.Build().Parameters);
+        var subSql = IncorporateSubquery(subquery);
         _where.Add(new Condition($"EXISTS ({subSql})"));
         return this;
     }
 
     public ICondition<T> WhereNotExists(IQuery subquery)
     {
-        var subSql = subquery.ToSql();
-        MergeParameters(subquery.Build().Parameters);
+        var subSql = IncorporateSubquery(subquery);
         _where.Add(new Condition($"NOT EXISTS ({subSql})"));
         return this;
     }
@@ -251,29 +251,25 @@ internal class QueryBuilder<T> :
 
     public ICondition<T> AndExists(IQuery subquery)
     {
-        var subSql = subquery.ToSql();
-        MergeParameters(subquery.Build().Parameters);
+        var subSql = IncorporateSubquery(subquery);
         return And(new Condition($"EXISTS ({subSql})"));
     }
 
     public ICondition<T> OrExists(IQuery subquery)
     {
-        var subSql = subquery.ToSql();
-        MergeParameters(subquery.Build().Parameters);
+        var subSql = IncorporateSubquery(subquery);
         return Or(new Condition($"EXISTS ({subSql})"));
     }
 
     public ICondition<T> AndNotExists(IQuery subquery)
     {
-        var subSql = subquery.ToSql();
-        MergeParameters(subquery.Build().Parameters);
+        var subSql = IncorporateSubquery(subquery);
         return And(new Condition($"NOT EXISTS ({subSql})"));
     }
 
     public ICondition<T> OrNotExists(IQuery subquery)
     {
-        var subSql = subquery.ToSql();
-        MergeParameters(subquery.Build().Parameters);
+        var subSql = IncorporateSubquery(subquery);
         return Or(new Condition($"NOT EXISTS ({subSql})"));
     }
 
@@ -460,8 +456,7 @@ internal class QueryBuilder<T> :
         foreach (var (query, operation) in _setOperations)
         {
             sql.Append($" {operation} ");
-            sql.Append(query.ToSql());
-            MergeParameters(query.Build().Parameters);
+            sql.Append(IncorporateSubquery(query));
         }
 
         // ORDER BY
@@ -487,6 +482,41 @@ internal class QueryBuilder<T> :
     // ═══════════════════════════════════════════════════════════════════════════
     // Helper Methods
     // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Incorporates a subquery's SQL and parameters, remapping parameter names to avoid collisions.
+    /// Returns the remapped SQL.
+    /// </summary>
+    private string IncorporateSubquery(IQuery subquery)
+    {
+        var result = subquery.Build();
+        var sql = result.Sql;
+
+        // Build remapping: @p0 -> @p{_paramIndex}, @p1 -> @p{_paramIndex+1}, etc.
+        // Use two-pass approach to avoid overlapping replacements
+        var paramList = result.Parameters.Keys
+            .Where(k => k.StartsWith("@p"))
+            .Select(k => (Key: k, Num: int.TryParse(k.Substring(2), out var n) ? n : -1))
+            .OrderByDescending(x => x.Num)
+            .ToList();
+
+        // First pass: replace with temporary placeholders
+        var tempPrefix = $"__temp_{Guid.NewGuid():N}_";
+        foreach (var (oldKey, _) in paramList)
+        {
+            sql = sql.Replace(oldKey, tempPrefix + oldKey);
+        }
+
+        // Second pass: replace temp placeholders with new names (lowest numbers first for correct ordering)
+        foreach (var (oldKey, _) in paramList.OrderBy(x => x.Num))
+        {
+            var newKey = $"@p{_paramIndex++}";
+            _params[newKey] = result.Parameters[oldKey];
+            sql = sql.Replace(tempPrefix + oldKey, newKey);
+        }
+
+        return sql;
+    }
 
     private void MergeParameters(IReadOnlyDictionary<string, object?> other)
     {

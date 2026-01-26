@@ -111,29 +111,46 @@ public class DeleteBuilder : IDelete, IDeleteFrom, IDeleteJoin, IDeleteWhere, ID
 
     public IDeleteWhere WhereIn<T>(Column<T> column, IQuery subquery)
     {
-        var subSql = subquery.ToSql();
+        var subSql = IncorporateSubquery(subquery);
         _where.Add(new Condition($"{column.FullName} IN ({subSql})"));
-        // Merge parameters from subquery
-        var subParams = subquery.Build().Parameters;
-        foreach (var param in subParams)
-        {
-            var newKey = $"@p{_paramIndex++}";
-            _params[newKey] = param.Value;
-        }
         return this;
     }
 
     public IDeleteWhere WhereExists(IQuery subquery)
     {
-        var subSql = subquery.ToSql();
+        var subSql = IncorporateSubquery(subquery);
         _where.Add(new Condition($"EXISTS ({subSql})"));
-        var subParams = subquery.Build().Parameters;
-        foreach (var param in subParams)
+        return this;
+    }
+
+    private string IncorporateSubquery(IQuery subquery)
+    {
+        var result = subquery.Build();
+        var sql = result.Sql;
+
+        // Use two-pass approach to avoid overlapping replacements
+        var paramList = result.Parameters.Keys
+            .Where(k => k.StartsWith("@p"))
+            .Select(k => (Key: k, Num: int.TryParse(k.Substring(2), out var n) ? n : -1))
+            .OrderByDescending(x => x.Num)
+            .ToList();
+
+        // First pass: replace with temporary placeholders
+        var tempPrefix = $"__temp_{Guid.NewGuid():N}_";
+        foreach (var (oldKey, _) in paramList)
+        {
+            sql = sql.Replace(oldKey, tempPrefix + oldKey);
+        }
+
+        // Second pass: replace temp placeholders with new names (lowest numbers first for correct ordering)
+        foreach (var (oldKey, _) in paramList.OrderBy(x => x.Num))
         {
             var newKey = $"@p{_paramIndex++}";
-            _params[newKey] = param.Value;
+            _params[newKey] = result.Parameters[oldKey];
+            sql = sql.Replace(tempPrefix + oldKey, newKey);
         }
-        return this;
+
+        return sql;
     }
 
     public IDeleteWhere And(Condition condition)

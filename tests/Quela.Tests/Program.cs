@@ -1218,6 +1218,114 @@ class Program
         });
 
         // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 20: Parameter Consistency Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Parameter Consistency Tests ──");
+
+        RunTest("InsertSelect_ParametersMatch", () =>
+        {
+            var selectQuery = Sql.From(ProductsTable)
+                .Where(Products.Price > 100m)
+                .And(Products.Name == "Test")
+                .Select(Products.Name, Products.Price, Products.CategoryId);
+            var insert = Sql.InsertInto(new Table("Archive", "dbo"))
+                .Columns(Products.Name, Products.Price, Products.CategoryId)
+                .Select(selectQuery);
+            var result = insert.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+        });
+
+        RunTest("DeleteWhereIn_ParametersMatch", () =>
+        {
+            var subquery = Sql.From(ProductsTable)
+                .Where(Products.Price > 500m)
+                .Select(Products.Id);
+            var delete = Sql.DeleteFrom(ProductsTable)
+                .WhereIn(Products.Id, subquery);
+            var result = delete.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+        });
+
+        RunTest("DeleteWhereExists_ParametersMatch", () =>
+        {
+            var subquery = Sql.From(ProductsTable)
+                .Where(Products.Price > 500m)
+                .And(Products.Status == "Active")
+                .Select(Sql.Literal(1));
+            var delete = Sql.DeleteFrom(ProductsTable)
+                .WhereExists(subquery);
+            var result = delete.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+        });
+
+        RunTest("MergeUsingSubquery_ParametersMatch", () =>
+        {
+            var sourceQuery = Sql.From(ProductsTable)
+                .Where(Products.Price > 100m)
+                .Select(Products.Id, Products.Name, Products.Price);
+            var merge = Sql.MergeInto(new Table("TargetProducts", "dbo"))
+                .Using(sourceQuery, "Source")
+                .On(Sql.Col<int>("TargetProducts.Id") == Sql.Col<int>("Source.Id"))
+                .WhenMatched()
+                .ThenUpdate()
+                .Set(Products.Price, Sql.Col<decimal>("Source.Price"))
+                .Build();
+            var result = merge.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+        });
+
+        RunTest("SelectInSubquery_ParametersMatch", () =>
+        {
+            var subquery = Sql.From(OrdersTable)
+                .Where(Orders.Total > 1000m)
+                .Select(Orders.CustomerId);
+            var query = Sql.From(CustomersTable)
+                .Where(Customers.Id.In(subquery))
+                .Select(Customers.Name);
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+        });
+
+        RunTest("SelectExistsSubquery_ParametersMatch", () =>
+        {
+            var subquery = Sql.From(OrdersTable)
+                .Where(Orders.CustomerId == Customers.Id)
+                .And(Orders.Total > 500m)
+                .Select(Sql.Literal(1));
+            var query = Sql.From(CustomersTable)
+                .Where(Sql.Exists(subquery))
+                .Select(Customers.Name);
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+        });
+
+        RunTest("CteWithParameters_ParametersMatch", () =>
+        {
+            var query = Sql.With("Expensive", () =>
+                    Sql.From(ProductsTable)
+                        .Where(Products.Price > 500m)
+                        .And(Products.Status == "Active")
+                        .Select(Products.Id, Products.Name, Products.Price))
+                .From(Sql.Cte("Expensive"))
+                .SelectAll();
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+        });
+
+        RunTest("UnionWithParameters_ParametersMatch", () =>
+        {
+            var q1 = Sql.From(ProductsTable)
+                .Where(Products.Price > 100m)
+                .Select(Products.Id, Products.Name);
+            var q2 = Sql.From(ProductsTable)
+                .Where(Products.Status == "Featured")
+                .Select(Products.Id, Products.Name);
+            var query = q1.Union(q2).Select(Sql.All);
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
         // Print Summary
         // ═══════════════════════════════════════════════════════════════════════════
         Console.WriteLine();
@@ -1253,6 +1361,33 @@ class Program
     static void Assert(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
+    }
+
+    static void AssertParametersMatchSql(string sql, IReadOnlyDictionary<string, object?> parameters)
+    {
+        // Extract all parameter references from SQL
+        var sqlParams = System.Text.RegularExpressions.Regex.Matches(sql, @"@p\d+")
+            .Select(m => m.Value)
+            .Distinct()
+            .ToHashSet();
+
+        // Check all SQL params exist in dictionary
+        foreach (var param in sqlParams)
+        {
+            if (!parameters.ContainsKey(param))
+            {
+                throw new Exception($"Parameter '{param}' in SQL not found in parameters dictionary.\n\nSQL:\n{sql}\n\nParameters:\n{string.Join(", ", parameters.Keys)}");
+            }
+        }
+
+        // Check all dictionary params exist in SQL
+        foreach (var key in parameters.Keys)
+        {
+            if (!sqlParams.Contains(key))
+            {
+                throw new Exception($"Parameter '{key}' in dictionary not found in SQL.\n\nSQL:\n{sql}\n\nParameters:\n{string.Join(", ", parameters.Keys)}");
+            }
+        }
     }
 
     static void AssertContainsDml(string sql, params string[] patterns)
