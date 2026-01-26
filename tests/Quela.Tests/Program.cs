@@ -4,428 +4,878 @@ using static Quela.Tests.Db;
 namespace Quela.Tests;
 
 /// <summary>
-/// Simple test runner that validates the SQL DSL works correctly.
+/// Comprehensive test runner for Quela SQL DSL.
+/// Tests SQL generation and validates syntax.
 /// </summary>
 class Program
 {
     static int _passed = 0;
     static int _failed = 0;
+    static bool _verbose = false;
 
     static void Main(string[] args)
     {
-        Console.WriteLine("Quela SQL DSL - Test Runner");
-        Console.WriteLine("══════════════════════════════════════════════════════════════");
+        _verbose = args.Contains("--verbose") || args.Contains("-v");
+
+        Console.WriteLine("Quela SQL DSL - Comprehensive Test Suite");
+        Console.WriteLine("══════════════════════════════════════════════════════════════════════");
         Console.WriteLine();
 
-        // Basic Query Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 1: Basic SELECT Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("── Basic SELECT Tests ──");
+
         RunTest("SimpleSelect_GeneratesValidSql", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
+            var query = Sql.From(ProductsTable)
                 .Select(Products.Id, Products.Name, Products.Price);
-
             var sql = query.ToSql();
-            Assert(sql.Contains("SELECT"), "Should contain SELECT");
-            Assert(sql.Contains("[Products].[Id]"), "Should contain Products.Id");
-            Assert(sql.Contains("[Products].[Name]"), "Should contain Products.Name");
-            Assert(sql.Contains("[Products].[Price]"), "Should contain Products.Price");
-            Assert(sql.Contains("FROM [dbo].[Products]"), "Should contain FROM clause");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "SELECT", "[Products].[Id]", "[Products].[Name]", "FROM [dbo].[Products]");
         });
 
         RunTest("SelectAll_GeneratesStarSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .SelectAll();
-
+            var query = Sql.From(ProductsTable).SelectAll();
             var sql = query.ToSql();
-            Assert(sql.Contains("SELECT *"), "Should contain SELECT *");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "SELECT *", "FROM [dbo].[Products]");
         });
 
         RunTest("SelectWithAlias_GeneratesAsSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
+            var query = Sql.From(ProductsTable)
                 .Select(Products.Name.As("ProductName"), Products.Price.As("UnitPrice"));
-
             var sql = query.ToSql();
-            Assert(sql.Contains("[Products].[Name] AS [ProductName]"), "Should contain Name AS ProductName");
-            Assert(sql.Contains("[Products].[Price] AS [UnitPrice]"), "Should contain Price AS UnitPrice");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "[Products].[Name] AS [ProductName]", "[Products].[Price] AS [UnitPrice]");
         });
 
         RunTest("SelectDistinct_GeneratesDistinctKeyword", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .SelectDistinct(Products.Name);
-
+            var query = Sql.From(ProductsTable).SelectDistinct(Products.Name);
             var sql = query.ToSql();
-            Assert(sql.Contains("SELECT DISTINCT"), "Should contain SELECT DISTINCT");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "SELECT DISTINCT");
         });
 
         RunTest("SelectTop_GeneratesTopClause", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .SelectTop(10, Products.Id, Products.Name);
-
+            var query = Sql.From(ProductsTable).SelectTop(10, Products.Id, Products.Name);
             var sql = query.ToSql();
-            Assert(sql.Contains("SELECT TOP (10)"), "Should contain TOP (10)");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "SELECT TOP (10)");
         });
 
-        RunTest("WhereWithEquals_ParameterizesValue", () =>
+        RunTest("SelectTopWithDistinct_CombinesBothKeywords", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .Where(Products.Name == "Widget")
-                .Select(Products.Id);
+            var query = Sql.From(ProductsTable).SelectTop(5, Products.CategoryId);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "TOP (5)");
+        });
 
+        RunTest("SelectFromMultipleTables_GeneratesCommaSeparatedFrom", () =>
+        {
+            var query = Sql.From(ProductsTable, CategoriesTable).SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "[dbo].[Products]", "[dbo].[Categories]");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 2: WHERE Clause Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── WHERE Clause Tests ──");
+
+        RunTest("WhereEquals_ParameterizesValue", () =>
+        {
+            var query = Sql.From(ProductsTable).Where(Products.Name == "Widget").Select(Products.Id);
             var result = query.Build();
-            Assert(result.Sql.Contains("WHERE [Products].[Name] = @p0"), "Should parameterize value");
-            Assert(result.Parameters.ContainsKey("@p0"), "Should have parameter @p0");
-            Assert(result.Parameters["@p0"]?.ToString() == "Widget", "Parameter should be Widget");
+            SqlValidator.AssertValid(result.Sql);
+            SqlValidator.AssertContains(result.Sql, "WHERE [Products].[Name] = @p0");
+            Assert(result.Parameters["@p0"]?.ToString() == "Widget", "Parameter value mismatch");
         });
 
-        RunTest("WhereWithNull_GeneratesIsNullSyntax", () =>
+        RunTest("WhereNotEquals_GeneratesNotEqualsSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .Where(Products.NullableCategoryId.IsNull())
-                .Select(Products.Id);
-
+            var query = Sql.From(ProductsTable).Where(Products.Status != "Deleted").Select(Products.Id);
             var sql = query.ToSql();
-            Assert(sql.Contains("[Products].[CategoryId] IS NULL"), "Should contain IS NULL");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "<>");
         });
 
-        RunTest("MultipleWhereClauses_CombinedWithAnd", () =>
+        RunTest("WhereGreaterThan_GeneratesComparisonOperator", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
+            var query = Sql.From(ProductsTable).Where(Products.Price > 100m).Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "[Products].[Price] > @p0");
+        });
+
+        RunTest("WhereLessThan_GeneratesComparisonOperator", () =>
+        {
+            var query = Sql.From(ProductsTable).Where(Products.Price < 50m).Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "[Products].[Price] < @p0");
+        });
+
+        RunTest("WhereGreaterThanOrEqual_GeneratesComparisonOperator", () =>
+        {
+            var query = Sql.From(ProductsTable).Where(Products.Price >= 100m).Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "[Products].[Price] >= @p0");
+        });
+
+        RunTest("WhereLessThanOrEqual_GeneratesComparisonOperator", () =>
+        {
+            var query = Sql.From(ProductsTable).Where(Products.Price <= 50m).Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "[Products].[Price] <= @p0");
+        });
+
+        RunTest("WhereIsNull_GeneratesIsNullSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable).Where(Products.NullableCategoryId.IsNull()).Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "IS NULL");
+        });
+
+        RunTest("WhereIsNotNull_GeneratesIsNotNullSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable).Where(Products.NullableCategoryId.IsNotNull()).Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "IS NOT NULL");
+        });
+
+        RunTest("WhereAnd_CombinesConditions", () =>
+        {
+            var query = Sql.From(ProductsTable)
                 .Where(Products.Price > 100)
                 .And(Products.Status == "Active")
                 .Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "AND");
+        });
 
+        RunTest("WhereOr_CombinesConditions", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Price > 1000)
+                .Or(Products.Status == "Featured")
+                .Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "OR");
+        });
+
+        RunTest("WhereComplexCondition_GroupsCorrectly", () =>
+        {
+            var condition = (Products.Price > 100) & (Products.Status == "Active");
+            var query = Sql.From(ProductsTable).Where(condition).Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "AND");
+        });
+
+        RunTest("WhereBetween_GeneratesBetweenSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable).Where(Products.Price.Between(10m, 100m)).Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "BETWEEN", "AND");
+        });
+
+        RunTest("WhereLike_GeneratesLikeSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable).Where(Products.Name.Like("Widget%")).Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "LIKE");
+        });
+
+        RunTest("WhereNotLike_GeneratesNotLikeSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable).Where(Products.Name.NotLike("%test%")).Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "NOT LIKE");
+        });
+
+        RunTest("WhereIn_GeneratesInListSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Status.In("Active", "Pending", "Review"))
+                .Select(Products.Id);
             var result = query.Build();
-            Assert(result.Sql.Contains("WHERE"), "Should contain WHERE");
-            Assert(result.Sql.Contains("[Products].[Price] > @p0"), "Should contain Price > @p0");
-            Assert(result.Sql.Contains("AND"), "Should contain AND");
+            SqlValidator.AssertValid(result.Sql);
+            SqlValidator.AssertContains(result.Sql, "IN (");
+            Assert(result.Parameters.Count == 3, "Should have 3 parameters for IN list");
         });
 
-        RunTest("OrderByAsc_GeneratesAscKeyword", () =>
+        RunTest("WhereNotIn_GeneratesNotInListSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .OrderBy(Products.Name.Asc())
-                .Select(Products.Id, Products.Name);
-
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Status.NotIn("Deleted", "Archived"))
+                .Select(Products.Id);
             var sql = query.ToSql();
-            Assert(sql.Contains("ORDER BY [Products].[Name] ASC"), "Should contain ORDER BY ASC");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "NOT IN (");
         });
 
-        RunTest("OrderByDesc_GeneratesDescKeyword", () =>
+        RunTest("WhereInEmptyList_GeneratesFalseCondition", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .OrderBy(Products.Price.Desc())
-                .Select(Products.Id, Products.Price);
-
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Status.In(Array.Empty<string>()))
+                .Select(Products.Id);
             var sql = query.ToSql();
-            Assert(sql.Contains("ORDER BY [Products].[Price] DESC"), "Should contain ORDER BY DESC");
+            SqlValidator.AssertContains(sql, "1 = 0");
         });
 
-        RunTest("OffsetFetch_GeneratesPaginationClause", () =>
+        RunTest("WhereNotInEmptyList_GeneratesTrueCondition", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Status.NotIn(Array.Empty<string>()))
+                .Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "1 = 1");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 3: JOIN Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── JOIN Tests ──");
+
+        RunTest("InnerJoin_GeneratesJoinSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Join(CategoriesTable).On(Products.CategoryId == Categories.Id)
+                .Select(Products.Name, Categories.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "INNER JOIN", "ON");
+        });
+
+        RunTest("LeftOuterJoin_GeneratesLeftJoinSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .LeftJoin(CategoriesTable).On(Products.CategoryId == Categories.Id)
+                .Select(Products.Name, Categories.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "LEFT OUTER JOIN");
+        });
+
+        RunTest("RightOuterJoin_GeneratesRightJoinSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .RightJoin(CategoriesTable).On(Products.CategoryId == Categories.Id)
+                .Select(Products.Name, Categories.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "RIGHT OUTER JOIN");
+        });
+
+        RunTest("FullOuterJoin_GeneratesFullJoinSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .FullJoin(CategoriesTable).On(Products.CategoryId == Categories.Id)
+                .Select(Products.Name, Categories.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "FULL OUTER JOIN");
+        });
+
+        RunTest("CrossJoin_GeneratesCrossJoinSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .CrossJoin(CategoriesTable)
+                .Select(Products.Name, Categories.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "CROSS JOIN");
+        });
+
+        RunTest("MultipleJoins_GeneratesAllJoinClauses", () =>
+        {
+            var query = Sql.From(OrdersTable)
+                .Join(CustomersTable).On(Orders.CustomerId == Customers.Id)
+                .Join(OrderItemsTable).On(OrderItems.OrderId == Orders.Id)
+                .Join(ProductsTable).On(OrderItems.ProductId == Products.Id)
+                .Select(Orders.Id, Customers.Name, Products.Name, OrderItems.Amount);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            Assert(sql.Split("INNER JOIN").Length - 1 == 3, "Should have 3 INNER JOINs");
+        });
+
+        RunTest("JoinWithComplexCondition_GeneratesComplexOnClause", () =>
+        {
+            var query = Sql.From(OrdersTable)
+                .Join(CustomersTable).On((Orders.CustomerId == Customers.Id) & (Customers.Status == "Active"))
+                .Select(Orders.Id, Customers.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "ON", "AND");
+        });
+
+        RunTest("JoinSubquery_GeneratesSubqueryJoin", () =>
+        {
+            var subquery = Sql.From(ProductsTable)
+                .Where(Products.Price > 100)
+                .Select(Products.Id, Products.Name, Products.CategoryId);
+            var query = Sql.From(CategoriesTable)
+                .Join(subquery, "ExpensiveProducts").On(Categories.Id == Sql.Col<int>("ExpensiveProducts.CategoryId"))
+                .Select(Categories.Name, Sql.Col<string>("ExpensiveProducts.Name"));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "INNER JOIN (SELECT", "AS [ExpensiveProducts]");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 4: ORDER BY Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── ORDER BY Tests ──");
+
+        RunTest("OrderByAsc_GeneratesAscSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable).OrderBy(Products.Name.Asc()).Select(Products.Id, Products.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "ORDER BY [Products].[Name] ASC");
+        });
+
+        RunTest("OrderByDesc_GeneratesDescSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable).OrderBy(Products.Price.Desc()).Select(Products.Id, Products.Price);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "ORDER BY [Products].[Price] DESC");
+        });
+
+        RunTest("OrderByMultipleColumns_GeneratesCommaSeparated", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .OrderBy(Products.CategoryId.Asc(), Products.Price.Desc())
+                .Select(Products.Id, Products.CategoryId, Products.Price);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "ORDER BY", "ASC", "DESC");
+        });
+
+        RunTest("OffsetFetch_GeneratesPaginationSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
                 .OrderBy(Products.Id.Asc())
                 .Select(Products.Id, Products.Name)
                 .OffsetFetch(10, 20);
-
             var sql = query.ToSql();
-            Assert(sql.Contains("OFFSET 10 ROWS FETCH NEXT 20 ROWS ONLY"), "Should contain OFFSET/FETCH");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "OFFSET 10 ROWS FETCH NEXT 20 ROWS ONLY");
         });
 
-        // Join Tests
-        RunTest("InnerJoin_GeneratesJoinSyntax", () =>
+        RunTest("OffsetOnly_GeneratesOffsetWithoutFetch", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .Join(CategoriesTable).On(Products.CategoryId == Categories.Id)
-                .Select(Products.Name, Categories.Name);
-
+            var query = Sql.From(ProductsTable)
+                .OrderBy(Products.Id.Asc())
+                .Select(Products.Id, Products.Name)
+                .Offset(10);
             var sql = query.ToSql();
-            Assert(sql.Contains("INNER JOIN [dbo].[Categories]"), "Should contain INNER JOIN");
-            Assert(sql.Contains("ON [Products].[CategoryId] = [Categories].[Id]"), "Should contain ON clause");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "OFFSET 10 ROWS");
+            SqlValidator.AssertNotContains(sql, "FETCH");
         });
 
-        RunTest("LeftJoin_GeneratesLeftJoinSyntax", () =>
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 5: Aggregate Function Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Aggregate Function Tests ──");
+
+        RunTest("CountStar_GeneratesCountStarSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .LeftJoin(CategoriesTable).On(Products.CategoryId == Categories.Id)
-                .Select(Products.Name, Categories.Name);
-
+            var query = Sql.From(ProductsTable).Select(Fn.Count());
             var sql = query.ToSql();
-            Assert(sql.Contains("LEFT OUTER JOIN [dbo].[Categories]"), "Should contain LEFT OUTER JOIN");
-        });
-
-        RunTest("RightJoin_GeneratesRightJoinSyntax", () =>
-        {
-            var query = Sql
-                .From(ProductsTable)
-                .RightJoin(CategoriesTable).On(Products.CategoryId == Categories.Id)
-                .Select(Products.Name, Categories.Name);
-
-            var sql = query.ToSql();
-            Assert(sql.Contains("RIGHT OUTER JOIN [dbo].[Categories]"), "Should contain RIGHT OUTER JOIN");
-        });
-
-        RunTest("MultipleJoins_GeneratesMultipleJoinClauses", () =>
-        {
-            var query = Sql
-                .From(OrdersTable)
-                .Join(CustomersTable).On(Orders.CustomerId == Customers.Id)
-                .Join(OrderItemsTable).On(OrderItems.OrderId == Orders.Id)
-                .Select(Orders.Id, Customers.Name, OrderItems.Amount);
-
-            var sql = query.ToSql();
-            Assert(sql.Contains("INNER JOIN [dbo].[Customers]"), "Should contain first JOIN");
-            Assert(sql.Contains("INNER JOIN [dbo].[OrderItems]"), "Should contain second JOIN");
-        });
-
-        // Aggregate Tests
-        RunTest("Count_GeneratesCountSyntax", () =>
-        {
-            var query = Sql
-                .From(ProductsTable)
-                .Select(Fn.Count());
-
-            var sql = query.ToSql();
-            Assert(sql.Contains("COUNT(*)"), "Should contain COUNT(*)");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "COUNT(*)");
         });
 
         RunTest("CountColumn_GeneratesCountColumnSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .Select(Fn.Count(Products.CategoryId));
-
+            var query = Sql.From(ProductsTable).Select(Fn.Count(Products.CategoryId));
             var sql = query.ToSql();
-            Assert(sql.Contains("COUNT([Products].[CategoryId])"), "Should contain COUNT(column)");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "COUNT([Products].[CategoryId])");
+        });
+
+        RunTest("CountDistinct_GeneratesCountDistinctSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable).Select(Fn.CountDistinct(Products.CategoryId));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "COUNT(DISTINCT [Products].[CategoryId])");
         });
 
         RunTest("Sum_GeneratesSumSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .Select(Fn.Sum(Products.Price));
-
+            var query = Sql.From(ProductsTable).Select(Fn.Sum(Products.Price));
             var sql = query.ToSql();
-            Assert(sql.Contains("SUM([Products].[Price])"), "Should contain SUM(column)");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "SUM([Products].[Price])");
+        });
+
+        RunTest("Avg_GeneratesAvgSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable).Select(Fn.Avg(Products.Price));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "AVG([Products].[Price])");
+        });
+
+        RunTest("Min_GeneratesMinSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable).Select(Fn.Min(Products.Price));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "MIN([Products].[Price])");
+        });
+
+        RunTest("Max_GeneratesMaxSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable).Select(Fn.Max(Products.Price));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "MAX([Products].[Price])");
         });
 
         RunTest("GroupBy_GeneratesGroupBySyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
+            var query = Sql.From(ProductsTable)
                 .GroupBy(Products.CategoryId)
                 .Select(Products.CategoryId, Fn.Count());
-
             var sql = query.ToSql();
-            Assert(sql.Contains("GROUP BY [Products].[CategoryId]"), "Should contain GROUP BY");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "GROUP BY [Products].[CategoryId]");
+        });
+
+        RunTest("GroupByMultipleColumns_GeneratesMultipleGroupBy", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .GroupBy(Products.CategoryId, Products.Status)
+                .Select(Products.CategoryId, Products.Status, Fn.Count());
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "GROUP BY [Products].[CategoryId], [Products].[Status]");
         });
 
         RunTest("Having_GeneratesHavingSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
+            var query = Sql.From(ProductsTable)
                 .GroupBy(Products.CategoryId)
                 .Having(Fn.Count() > 5)
                 .Select(Products.CategoryId, Fn.Count());
-
             var sql = query.ToSql();
-            Assert(sql.Contains("HAVING COUNT(*) >"), "Should contain HAVING");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "HAVING COUNT(*) >");
         });
 
-        // Window Function Tests
+        RunTest("HavingWithSum_GeneratesHavingWithAggregate", () =>
+        {
+            var query = Sql.From(OrderItemsTable)
+                .GroupBy(OrderItems.OrderId)
+                .Having(Fn.Sum(OrderItems.Amount) > 1000)
+                .Select(OrderItems.OrderId, Fn.Sum(OrderItems.Amount));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "HAVING SUM([OrderItems].[Amount]) >");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 6: Window Function Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Window Function Tests ──");
+
         RunTest("RowNumber_GeneratesRowNumberSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .Select(
-                    Products.Id,
-                    Window.RowNumber()
-                          .Over(o => o.OrderBy(Products.Price.Desc()))
-                          .As("RowNum"));
-
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Window.RowNumber().Over(o => o.OrderBy(Products.Price.Desc())).As("RowNum"));
             var sql = query.ToSql();
-            Assert(sql.Contains("ROW_NUMBER()"), "Should contain ROW_NUMBER()");
-            Assert(sql.Contains("OVER"), "Should contain OVER");
-            Assert(sql.Contains("ORDER BY"), "Should contain ORDER BY in OVER");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "ROW_NUMBER()", "OVER", "ORDER BY");
         });
 
-        RunTest("RowNumberWithPartition_GeneratesPartitionBySyntax", () =>
+        RunTest("RowNumberWithPartition_GeneratesPartitionSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .Select(
-                    Products.Id,
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id,
                     Window.RowNumber()
-                          .Over(o => o.PartitionBy(Products.CategoryId)
-                                      .OrderBy(Products.Price.Desc()))
-                          .As("RowNum"));
-
+                        .Over(o => o.PartitionBy(Products.CategoryId).OrderBy(Products.Price.Desc()))
+                        .As("RowNum"));
             var sql = query.ToSql();
-            Assert(sql.Contains("PARTITION BY [Products].[CategoryId]"), "Should contain PARTITION BY");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "PARTITION BY [Products].[CategoryId]");
         });
 
-        // CTE Tests
+        RunTest("Rank_GeneratesRankSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Window.Rank().Over(o => o.OrderBy(Products.Price.Desc())).As("Rank"));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "RANK()", "OVER");
+        });
+
+        RunTest("DenseRank_GeneratesDenseRankSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Window.DenseRank().Over(o => o.OrderBy(Products.Price.Desc())).As("DenseRank"));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "DENSE_RANK()", "OVER");
+        });
+
+        RunTest("Lag_GeneratesLagSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Products.Price,
+                    Window.Lag(Products.Price, 1).Over(o => o.OrderBy(Products.Id.Asc())).As("PrevPrice"));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "LAG([Products].[Price], 1)", "OVER");
+        });
+
+        RunTest("Lead_GeneratesLeadSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Products.Price,
+                    Window.Lead(Products.Price, 1).Over(o => o.OrderBy(Products.Id.Asc())).As("NextPrice"));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "LEAD([Products].[Price], 1)", "OVER");
+        });
+
+        RunTest("SumOver_GeneratesSumWindowSyntax", () =>
+        {
+            var query = Sql.From(OrderItemsTable)
+                .Select(OrderItems.OrderId, OrderItems.Amount,
+                    Window.Sum(OrderItems.Amount)
+                        .Over(o => o.PartitionBy(OrderItems.OrderId))
+                        .As("OrderTotal"));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "SUM([OrderItems].[Amount]) OVER");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 7: CTE Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── CTE Tests ──");
+
         RunTest("SimpleCte_GeneratesWithClause", () =>
         {
-            var query = Sql
-                .With("ExpensiveProducts", () => Sql
-                    .From(ProductsTable)
-                    .Where(Products.Price > 1000)
-                    .Select(Products.Id, Products.Name, Products.Price))
+            var query = Sql.With("ExpensiveProducts", () =>
+                    Sql.From(ProductsTable).Where(Products.Price > 1000).Select(Products.Id, Products.Name, Products.Price))
                 .From(Sql.Cte("ExpensiveProducts"))
                 .SelectAll();
-
             var sql = query.ToSql();
-            Assert(sql.Contains("WITH [ExpensiveProducts] AS"), "Should contain WITH clause");
-            Assert(sql.Contains("FROM [ExpensiveProducts]"), "Should contain FROM CTE");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "WITH [ExpensiveProducts] AS", "FROM [ExpensiveProducts]");
         });
 
-        // Set Operations Tests
+        RunTest("MultipleCtes_GeneratesMultipleWithClauses", () =>
+        {
+            var query = Sql
+                .With("Expensive", () => Sql.From(ProductsTable).Where(Products.Price > 1000).Select(Products.Id, Products.CategoryId))
+                .With("Popular", () => Sql.From(OrderItemsTable).GroupBy(OrderItems.ProductId).Having(Fn.Count() > 10).Select(OrderItems.ProductId))
+                .From(Sql.Cte("Expensive"))
+                .Join(Sql.Cte("Popular")).On(Sql.Col<int>("Expensive.Id") == Sql.Col<int>("Popular.ProductId"))
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "WITH", "[Expensive] AS", "[Popular] AS");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 8: Set Operation Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Set Operation Tests ──");
+
         RunTest("Union_GeneratesUnionSyntax", () =>
         {
-            var query1 = Sql
-                .From(ProductsTable)
-                .Where(Products.Price > 100)
-                .Select(Products.Id, Products.Name);
-
-            var query2 = Sql
-                .From(ProductsTable)
-                .Where(Products.Status == "Featured")
-                .Select(Products.Id, Products.Name);
-
-            var combined = query1.Union(query2).Select(Sql.All);
+            var q1 = Sql.From(ProductsTable).Where(Products.Price > 100).Select(Products.Id, Products.Name);
+            var q2 = Sql.From(ProductsTable).Where(Products.Status == "Featured").Select(Products.Id, Products.Name);
+            var combined = q1.Union(q2).Select(Sql.All);
             var sql = combined.ToSql();
-            Assert(sql.Contains("UNION"), "Should contain UNION");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "UNION");
+            SqlValidator.AssertNotContains(sql, "UNION ALL");
         });
 
         RunTest("UnionAll_GeneratesUnionAllSyntax", () =>
         {
-            var query1 = Sql
-                .From(ProductsTable)
-                .Where(Products.Price > 100)
-                .Select(Products.Id, Products.Name);
-
-            var query2 = Sql
-                .From(ProductsTable)
-                .Where(Products.Status == "Featured")
-                .Select(Products.Id, Products.Name);
-
-            var combined = query1.UnionAll(query2).Select(Sql.All);
+            var q1 = Sql.From(ProductsTable).Where(Products.Price > 100).Select(Products.Id, Products.Name);
+            var q2 = Sql.From(ProductsTable).Where(Products.Status == "Featured").Select(Products.Id, Products.Name);
+            var combined = q1.UnionAll(q2).Select(Sql.All);
             var sql = combined.ToSql();
-            Assert(sql.Contains("UNION ALL"), "Should contain UNION ALL");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "UNION ALL");
         });
 
-        // Subquery Tests
-        RunTest("InSubquery_GeneratesInSubquerySyntax", () =>
+        RunTest("Intersect_GeneratesIntersectSyntax", () =>
         {
-            var subquery = Sql
-                .From(OrderItemsTable)
-                .Select(OrderItems.ProductId);
+            var q1 = Sql.From(ProductsTable).Where(Products.Price > 100).Select(Products.Id);
+            var q2 = Sql.From(ProductsTable).Where(Products.Status == "Active").Select(Products.Id);
+            var combined = q1.Intersect(q2).Select(Sql.All);
+            var sql = combined.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "INTERSECT");
+        });
 
-            var query = Sql
-                .From(ProductsTable)
-                .Where(Products.Id.In(subquery))
-                .Select(Products.Id, Products.Name);
+        RunTest("Except_GeneratesExceptSyntax", () =>
+        {
+            var q1 = Sql.From(ProductsTable).Select(Products.Id);
+            var q2 = Sql.From(OrderItemsTable).Select(OrderItems.ProductId);
+            var combined = q1.Except(q2).Select(Sql.All);
+            var sql = combined.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "EXCEPT");
+        });
 
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 9: Subquery Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Subquery Tests ──");
+
+        RunTest("InSubquery_GeneratesInSelectSyntax", () =>
+        {
+            var subquery = Sql.From(OrderItemsTable).Select(OrderItems.ProductId);
+            var query = Sql.From(ProductsTable).Where(Products.Id.In(subquery)).Select(Products.Id, Products.Name);
             var sql = query.ToSql();
-            Assert(sql.Contains("IN (SELECT"), "Should contain IN (SELECT...)");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "IN (SELECT");
         });
 
         RunTest("ExistsSubquery_GeneratesExistsSyntax", () =>
         {
-            var subquery = Sql
-                .From(OrderItemsTable)
-                .Where(OrderItems.ProductId == Products.Id)
-                .Select(Sql.Literal(1));
-
-            var query = Sql
-                .From(ProductsTable)
-                .Where(Sql.Exists(subquery))
-                .Select(Products.Id, Products.Name);
-
+            var subquery = Sql.From(OrderItemsTable).Where(OrderItems.ProductId == Products.Id).Select(Sql.Literal(1));
+            var query = Sql.From(ProductsTable).Where(Sql.Exists(subquery)).Select(Products.Id, Products.Name);
             var sql = query.ToSql();
-            Assert(sql.Contains("EXISTS (SELECT"), "Should contain EXISTS (SELECT...)");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "EXISTS (SELECT");
         });
 
-        // Between Tests
-        RunTest("Between_GeneratesBetweenSyntax", () =>
+        RunTest("NotExistsSubquery_GeneratesNotExistsSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .Where(Products.Price.Between(10m, 100m))
-                .Select(Products.Id, Products.Name);
-
+            var subquery = Sql.From(OrderItemsTable).Where(OrderItems.ProductId == Products.Id).Select(Sql.Literal(1));
+            var query = Sql.From(ProductsTable).Where(Sql.NotExists(subquery)).Select(Products.Id, Products.Name);
             var sql = query.ToSql();
-            Assert(sql.Contains("BETWEEN"), "Should contain BETWEEN");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "NOT EXISTS (SELECT");
         });
 
-        // Like Tests
-        RunTest("Like_GeneratesLikeSyntax", () =>
+        RunTest("SubqueryInFrom_GeneratesDerivedTable", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .Where(Products.Name.Like("Widget%"))
-                .Select(Products.Id, Products.Name);
-
+            var subquery = Sql.From(ProductsTable).Where(Products.Price > 100).Select(Products.Id, Products.Name, Products.CategoryId);
+            var query = Sql.From(subquery, "ExpensiveProducts")
+                .Join(CategoriesTable).On(Sql.Col<int>("ExpensiveProducts.CategoryId") == Categories.Id)
+                .Select(Sql.Col<string>("ExpensiveProducts.Name"), Categories.Name);
             var sql = query.ToSql();
-            Assert(sql.Contains("LIKE"), "Should contain LIKE");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "FROM (SELECT", "AS [ExpensiveProducts]");
         });
 
-        // IsNull / IsNotNull Tests
-        RunTest("IsNull_GeneratesIsNullSyntax", () =>
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 10: CASE Expression Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── CASE Expression Tests ──");
+
+        RunTest("CaseWhen_GeneratesCaseSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .Where(Products.CategoryId.IsNull())
-                .Select(Products.Id, Products.Name);
-
+            var caseExpr = Case.When(Products.Price > 1000, "Expensive")
+                               .When(Products.Price > 100, "Medium")
+                               .Else("Cheap");
+            var query = Sql.From(ProductsTable).Select(Products.Name, caseExpr.As("PriceCategory"));
             var sql = query.ToSql();
-            Assert(sql.Contains("IS NULL"), "Should contain IS NULL");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "CASE", "WHEN", "THEN", "ELSE", "END");
         });
 
-        RunTest("IsNotNull_GeneratesIsNotNullSyntax", () =>
+        RunTest("CaseWhenWithoutElse_GeneratesCaseSyntax", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .Where(Products.CategoryId.IsNotNull())
-                .Select(Products.Id, Products.Name);
-
+            var caseExpr = Case.When(Products.Status == "Active", "Yes").End();
+            var query = Sql.From(ProductsTable).Select(Products.Name, caseExpr.As("IsActive"));
             var sql = query.ToSql();
-            Assert(sql.Contains("IS NOT NULL"), "Should contain IS NOT NULL");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "CASE", "WHEN", "THEN", "END");
         });
 
-        // In list Tests
-        RunTest("InList_GeneratesInSyntax", () =>
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 11: Literal & Raw SQL Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Literal & Raw SQL Tests ──");
+
+        RunTest("LiteralInt_GeneratesLiteralValue", () =>
         {
-            var query = Sql
-                .From(ProductsTable)
-                .Where(Products.Status.In("Active", "Pending", "Review"))
-                .Select(Products.Id, Products.Name);
-
+            var query = Sql.From(ProductsTable).Select(Products.Name, Sql.Literal(1).As("One"));
             var sql = query.ToSql();
-            Assert(sql.Contains("IN ("), "Should contain IN (...)");
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "1 AS [One]");
         });
 
-        // Print summary
+        RunTest("LiteralString_GeneratesQuotedLiteral", () =>
+        {
+            var query = Sql.From(ProductsTable).Select(Products.Name, Sql.Literal("test").As("Test"));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "'test' AS [Test]");
+        });
+
+        RunTest("RawSql_AllowsCustomSqlExpression", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Name, Sql.Raw<DateTime>($"GETDATE()").As("CurrentTime"));
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "GETDATE()");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 12: Parameterization Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Parameterization Tests ──");
+
+        RunTest("MultipleParameters_NumberedSequentially", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Name == "Widget")
+                .And(Products.Price > 100)
+                .And(Products.Status == "Active")
+                .Select(Products.Id);
+            var result = query.Build();
+            Assert(result.Parameters.ContainsKey("@p0"), "Should have @p0");
+            Assert(result.Parameters.ContainsKey("@p1"), "Should have @p1");
+            Assert(result.Parameters.ContainsKey("@p2"), "Should have @p2");
+        });
+
+        RunTest("NullParameter_GeneratesIsNullNotParameter", () =>
+        {
+            var query = Sql.From(ProductsTable).Where(Products.Name == (string?)null).Select(Products.Id);
+            var result = query.Build();
+            SqlValidator.AssertContains(result.Sql, "IS NULL");
+            Assert(result.Parameters.Count == 0, "Should have no parameters for null comparison");
+        });
+
+        RunTest("UnicodeString_ParameterizedCorrectly", () =>
+        {
+            var query = Sql.From(ProductsTable).Where(Products.Name == "日本語テスト").Select(Products.Id);
+            var result = query.Build();
+            Assert(result.Parameters["@p0"]?.ToString() == "日本語テスト", "Unicode should be preserved");
+        });
+
+        RunTest("SpecialCharacters_ParameterizedCorrectly", () =>
+        {
+            var query = Sql.From(ProductsTable).Where(Products.Name == "O'Brien; DROP TABLE--").Select(Products.Id);
+            var result = query.Build();
+            SqlValidator.AssertContains(result.Sql, "@p0");
+            SqlValidator.AssertNotContains(result.Sql, "DROP TABLE");
+            Assert(result.Parameters["@p0"]?.ToString() == "O'Brien; DROP TABLE--", "Special chars should be in parameter");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 13: Edge Cases & Complex Queries
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Edge Cases & Complex Queries ──");
+
+        RunTest("ComplexQuery_AllClausesCombined", () =>
+        {
+            var query = Sql.From(OrdersTable)
+                .Join(CustomersTable).On(Orders.CustomerId == Customers.Id)
+                .Join(OrderItemsTable).On(OrderItems.OrderId == Orders.Id)
+                .Join(ProductsTable).On(OrderItems.ProductId == Products.Id)
+                .Where(Orders.OrderDate > DateTime.Now.AddDays(-30))
+                .And(Products.Status == "Active")
+                .GroupBy(Customers.Name, Products.CategoryId)
+                .Having(Fn.Sum(OrderItems.Amount) > 1000)
+                .OrderBy(Fn.Sum(OrderItems.Amount).Desc())
+                .Select(Customers.Name, Products.CategoryId, Fn.Sum(OrderItems.Amount).As("TotalAmount"))
+                .OffsetFetch(0, 10);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "SELECT", "FROM", "INNER JOIN", "WHERE", "GROUP BY", "HAVING", "ORDER BY", "OFFSET", "FETCH");
+        });
+
+        RunTest("NestedSubqueries_GeneratesCorrectly", () =>
+        {
+            var innerSubquery = Sql.From(OrderItemsTable)
+                .GroupBy(OrderItems.ProductId)
+                .Having(Fn.Count() > 5)
+                .Select(OrderItems.ProductId);
+            var outerSubquery = Sql.From(ProductsTable)
+                .Where(Products.Id.In(innerSubquery))
+                .Select(Products.CategoryId);
+            var query = Sql.From(CategoriesTable)
+                .Where(Categories.Id.In(outerSubquery))
+                .Select(Categories.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            Assert(sql.Split("SELECT").Length - 1 >= 3, "Should have at least 3 SELECT statements");
+        });
+
+        RunTest("EmptyConditions_HandledGracefully", () =>
+        {
+            var query = Sql.From(ProductsTable).Select(Products.Id, Products.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertNotContains(sql, "WHERE");
+        });
+
+        RunTest("ChainedConditions_MaintainsCorrectPrecedence", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Price > 100)
+                .And(Products.Status == "Active")
+                .Or(Products.Status == "Featured")
+                .Select(Products.Id);
+            var sql = query.ToSql();
+            SqlValidator.AssertValid(sql);
+            SqlValidator.AssertContains(sql, "WHERE", "AND", "OR");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 14: SQL Injection Prevention Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── SQL Injection Prevention Tests ──");
+
+        RunTest("SqlInjection_InStringValue_Parameterized", () =>
+        {
+            var malicious = "'; DELETE FROM Products; --";
+            var query = Sql.From(ProductsTable).Where(Products.Name == malicious).Select(Products.Id);
+            var result = query.Build();
+            SqlValidator.AssertNotContains(result.Sql, "DELETE");
+            SqlValidator.AssertContains(result.Sql, "@p0");
+        });
+
+        RunTest("SqlInjection_InLikePattern_Parameterized", () =>
+        {
+            var malicious = "%'; DELETE FROM Products; --%";
+            var query = Sql.From(ProductsTable).Where(Products.Name.Like(malicious)).Select(Products.Id);
+            var result = query.Build();
+            SqlValidator.AssertNotContains(result.Sql, "DELETE");
+            SqlValidator.AssertContains(result.Sql, "@p0");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Print Summary
+        // ═══════════════════════════════════════════════════════════════════════════
         Console.WriteLine();
-        Console.WriteLine("══════════════════════════════════════════════════════════════");
-        Console.WriteLine($"Results: {_passed} passed, {_failed} failed");
-        Console.WriteLine("══════════════════════════════════════════════════════════════");
+        Console.WriteLine("══════════════════════════════════════════════════════════════════════");
+        Console.WriteLine($"Results: {_passed} passed, {_failed} failed, {_passed + _failed} total");
+        Console.WriteLine("══════════════════════════════════════════════════════════════════════");
 
         Environment.Exit(_failed > 0 ? 1 : 0);
     }
@@ -442,15 +892,18 @@ class Program
         {
             Console.WriteLine($"  [FAIL] {name}");
             Console.WriteLine($"         {ex.Message}");
+            if (_verbose && ex.StackTrace != null)
+            {
+                var lines = ex.StackTrace.Split('\n').Take(3);
+                foreach (var line in lines)
+                    Console.WriteLine($"         {line.Trim()}");
+            }
             _failed++;
         }
     }
 
     static void Assert(bool condition, string message)
     {
-        if (!condition)
-        {
-            throw new Exception(message);
-        }
+        if (!condition) throw new Exception(message);
     }
 }

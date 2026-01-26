@@ -47,6 +47,7 @@ public static class Db
         public static readonly Column<string> Name = new("Customers", "Name");
         public static readonly Column<string> Email = new("Customers", "Email");
         public static readonly Column<DateTime> CreatedAt = new("Customers", "CreatedAt");
+        public static readonly Column<string> Status = new("Customers", "Status");
     }
 
     public static class Employees

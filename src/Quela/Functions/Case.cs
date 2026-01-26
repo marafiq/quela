@@ -1,6 +1,29 @@
 namespace Quela;
 
 /// <summary>
+/// Static entry point for CASE expressions.
+/// </summary>
+public static class Case
+{
+    /// <summary>
+    /// Starts a searched CASE expression: CASE WHEN condition THEN result...
+    /// </summary>
+    public static CaseBuilder When(Condition condition, object result)
+    {
+        var builder = new CaseBuilder();
+        return builder.When(condition, result);
+    }
+
+    /// <summary>
+    /// Starts a simple CASE expression: CASE expression WHEN value THEN result...
+    /// </summary>
+    public static SimpleCaseBuilder<T> On<T>(Column<T> column)
+    {
+        return new SimpleCaseBuilder<T>(column.FullName);
+    }
+}
+
+/// <summary>
 /// Builder for CASE WHEN ... THEN ... ELSE ... END expressions.
 /// </summary>
 public class CaseBuilder
@@ -32,6 +55,14 @@ public class CaseBuilder
     public CaseExpression<T> End<T>()
     {
         return new CaseExpression<T>(Build());
+    }
+
+    /// <summary>
+    /// Ends the CASE without ELSE (returns NULL when no match).
+    /// </summary>
+    public CaseExpression<object> End()
+    {
+        return new CaseExpression<object>(Build());
     }
 
     private string Build()
