@@ -1,4 +1,5 @@
 using Quela;
+using Quela.Dml;
 using static Quela.Tests.Db;
 
 namespace Quela.Tests;
@@ -870,6 +871,353 @@ class Program
         });
 
         // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 15: INSERT Statement Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── INSERT Statement Tests ──");
+
+        RunTest("Insert_SingleRow_GeneratesValidSql", () =>
+        {
+            var insert = Sql.InsertInto(ProductsTable)
+                .Columns(Products.Name, Products.Price, Products.CategoryId)
+                .Values("Widget", 99.99m, 1);
+            var result = insert.Build();
+            AssertContainsDml(result.Sql, "INSERT INTO [dbo].[Products]", "([Name], [Price], [CategoryId])", "VALUES", "@p0", "@p1", "@p2");
+            Assert(result.Parameters.Count == 3, "Should have 3 parameters");
+        });
+
+        RunTest("Insert_MultipleRows_GeneratesBulkInsert", () =>
+        {
+            var insert = Sql.InsertInto(ProductsTable)
+                .Columns(Products.Name, Products.Price)
+                .Values("Widget1", 10.00m)
+                .Values("Widget2", 20.00m)
+                .Values("Widget3", 30.00m);
+            var result = insert.Build();
+            AssertContainsDml(result.Sql, "INSERT INTO", "VALUES");
+            Assert(result.Parameters.Count == 6, "Should have 6 parameters for 3 rows × 2 columns");
+        });
+
+        RunTest("Insert_BulkValues_GeneratesBulkInsert", () =>
+        {
+            var rows = new List<object?[]>
+            {
+                new object?[] { "Product1", 10.00m },
+                new object?[] { "Product2", 20.00m },
+                new object?[] { "Product3", 30.00m }
+            };
+            var insert = Sql.InsertInto(ProductsTable)
+                .Columns(Products.Name, Products.Price)
+                .BulkValues(rows);
+            var result = insert.Build();
+            AssertContainsDml(result.Sql, "INSERT INTO", "VALUES");
+            Assert(result.Parameters.Count == 6, "Should have 6 parameters");
+        });
+
+        RunTest("Insert_WithNull_GeneratesNullValue", () =>
+        {
+            var insert = Sql.InsertInto(ProductsTable)
+                .Columns(Products.Name, Products.Price, Products.NullableCategoryId)
+                .Values("Widget", 99.99m, null);
+            var result = insert.Build();
+            AssertContainsDml(result.Sql, "NULL");
+            Assert(result.Parameters.Count == 2, "Should have 2 non-null parameters");
+        });
+
+        RunTest("Insert_FromSelect_GeneratesInsertSelect", () =>
+        {
+            var selectQuery = Sql.From(ProductsTable)
+                .Where(Products.Price > 100)
+                .Select(Products.Name, Products.Price, Products.CategoryId);
+            var insert = Sql.InsertInto(new Table("ProductsArchive", "dbo"))
+                .Columns(Products.Name, Products.Price, Products.CategoryId)
+                .Select(selectQuery);
+            var result = insert.Build();
+            AssertContainsDml(result.Sql, "INSERT INTO", "SELECT", "FROM [dbo].[Products]", "WHERE");
+        });
+
+        RunTest("Insert_WithOutput_GeneratesOutputClause", () =>
+        {
+            var insert = Sql.InsertInto(ProductsTable)
+                .Columns(Products.Name, Products.Price)
+                .Values("Widget", 99.99m)
+                .Output(Products.Id);
+            var result = insert.Build();
+            AssertContainsDml(result.Sql, "OUTPUT INSERTED.[Id]");
+        });
+
+        RunTest("Insert_DefaultValues_GeneratesDefaultValuesSyntax", () =>
+        {
+            var insert = Sql.InsertInto(ProductsTable);
+            // Access internal builder via interface chain (columns then build)
+            var builder = (InsertBuilder)insert;
+            var result = builder.Build();
+            AssertContainsDml(result.Sql, "DEFAULT VALUES");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 16: UPDATE Statement Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── UPDATE Statement Tests ──");
+
+        RunTest("Update_SingleColumn_GeneratesValidSql", () =>
+        {
+            var update = Sql.Update(ProductsTable)
+                .Set(Products.Price, 199.99m)
+                .Where(Products.Id == 1);
+            var result = update.Build();
+            AssertContainsDml(result.Sql, "UPDATE [dbo].[Products]", "SET [Price] = @p0", "WHERE");
+            Assert(result.Parameters.ContainsKey("@p0"), "Should have parameter @p0");
+        });
+
+        RunTest("Update_MultipleColumns_GeneratesMultipleSets", () =>
+        {
+            var update = Sql.Update(ProductsTable)
+                .Set(Products.Name, "Updated Widget")
+                .Set(Products.Price, 299.99m)
+                .Set(Products.Status, "Active")
+                .Where(Products.Id == 1);
+            var result = update.Build();
+            AssertContainsDml(result.Sql, "SET [Name] = @p0", "[Price] = @p1", "[Status] = @p2");
+        });
+
+        RunTest("Update_SetToNull_GeneratesNullAssignment", () =>
+        {
+            var update = Sql.Update(ProductsTable)
+                .Set(Products.NullableCategoryId, (int?)null)
+                .Where(Products.Id == 1);
+            var result = update.Build();
+            AssertContainsDml(result.Sql, "SET [CategoryId] = NULL");
+        });
+
+        RunTest("Update_SetToColumn_GeneratesColumnReference", () =>
+        {
+            var update = Sql.Update(ProductsTable)
+                .Set(Products.Price, Products.Price)  // Set price to itself (for demo)
+                .Where(Products.Id == 1);
+            var result = update.Build();
+            AssertContainsDml(result.Sql, "SET [Price] = [Products].[Price]");
+        });
+
+        RunTest("Update_WithComplexWhere_GeneratesWhereClause", () =>
+        {
+            var update = Sql.Update(ProductsTable)
+                .Set(Products.Status, "Archived")
+                .Where(Products.Price < 10)
+                .And(Products.Status == "Active");
+            var result = update.Build();
+            AssertContainsDml(result.Sql, "WHERE", "AND");
+        });
+
+        RunTest("Update_WithOutput_GeneratesOutputClause", () =>
+        {
+            var update = Sql.Update(ProductsTable)
+                .Set(Products.Status, "Updated")
+                .Where(Products.Id == 1)
+                .Output(Products.Id, Products.Name);
+            var result = update.Build();
+            AssertContainsDml(result.Sql, "OUTPUT INSERTED.[Id], INSERTED.[Name]");
+        });
+
+        RunTest("Update_CorrelatedWithFrom_GeneratesFromClause", () =>
+        {
+            var update = Sql.Update(ProductsTable)
+                .Set(Products.Status, "Popular")
+                .From(OrderItemsTable)
+                .Where((Products.Id == OrderItems.ProductId) & (OrderItems.Quantity > 100));
+            var result = update.Build();
+            AssertContainsDml(result.Sql, "UPDATE [dbo].[Products]", "FROM [dbo].[OrderItems]", "WHERE");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 17: DELETE Statement Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── DELETE Statement Tests ──");
+
+        RunTest("Delete_WithWhere_GeneratesValidSql", () =>
+        {
+            var delete = Sql.DeleteFrom(ProductsTable)
+                .Where(Products.Status == "Deleted");
+            var result = delete.Build();
+            AssertContainsDml(result.Sql, "DELETE FROM [dbo].[Products]", "WHERE [Products].[Status] = @p0");
+        });
+
+        RunTest("Delete_WithComplexWhere_GeneratesComplexCondition", () =>
+        {
+            var delete = Sql.DeleteFrom(ProductsTable)
+                .Where(Products.Price < 1)
+                .And(Products.Status == "Inactive")
+                .Or(Products.Status == "Archived");
+            var result = delete.Build();
+            AssertContainsDml(result.Sql, "DELETE FROM", "WHERE", "AND", "OR");
+        });
+
+        RunTest("Delete_WithOutput_GeneratesOutputClause", () =>
+        {
+            var delete = Sql.DeleteFrom(ProductsTable)
+                .Where(Products.Status == "ToDelete")
+                .Output(Products.Id, Products.Name);
+            var result = delete.Build();
+            AssertContainsDml(result.Sql, "OUTPUT DELETED.[Id], DELETED.[Name]");
+        });
+
+        RunTest("Delete_WhereIn_GeneratesInSubquery", () =>
+        {
+            var subquery = Sql.From(OrderItemsTable)
+                .GroupBy(OrderItems.ProductId)
+                .Having(Fn.Count() == 0)
+                .Select(OrderItems.ProductId);
+            var delete = Sql.DeleteFrom(ProductsTable)
+                .WhereIn(Products.Id, subquery);
+            var result = delete.Build();
+            AssertContainsDml(result.Sql, "DELETE FROM", "WHERE [Products].[Id] IN (SELECT");
+        });
+
+        RunTest("Delete_WhereExists_GeneratesExistsSubquery", () =>
+        {
+            var subquery = Sql.From(OrderItemsTable)
+                .Where(OrderItems.ProductId == Products.Id)
+                .Select(Sql.Literal(1));
+            var delete = Sql.DeleteFrom(ProductsTable)
+                .WhereExists(subquery);
+            var result = delete.Build();
+            AssertContainsDml(result.Sql, "DELETE FROM", "WHERE EXISTS (SELECT");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 18: MERGE Statement Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── MERGE Statement Tests ──");
+
+        RunTest("Merge_UsingTable_GeneratesValidSql", () =>
+        {
+            var merge = Sql.MergeInto(ProductsTable)
+                .Using(new Table("ProductUpdates", "dbo"))
+                .On(Products.Id == Sql.Col<int>("ProductUpdates.Id"))
+                .WhenMatched().ThenUpdate()
+                    .Set(Products.Price, Sql.Col<decimal>("ProductUpdates.Price"))
+                    .Build();
+            var result = merge.Build();
+            AssertContainsDml(result.Sql, "MERGE INTO [dbo].[Products] AS TARGET", "USING [dbo].[ProductUpdates] AS SOURCE", "ON", "WHEN MATCHED", "THEN UPDATE SET");
+            AssertContainsDml(result.Sql, ";"); // MERGE must end with semicolon
+        });
+
+        RunTest("Merge_WhenMatchedDelete_GeneratesDeleteAction", () =>
+        {
+            var merge = Sql.MergeInto(ProductsTable)
+                .Using(new Table("ProductsToDelete", "dbo"))
+                .On(Products.Id == Sql.Col<int>("ProductsToDelete.Id"))
+                .WhenMatched().ThenDelete()
+                .Build();
+            var result = merge.Build();
+            AssertContainsDml(result.Sql, "WHEN MATCHED THEN DELETE");
+        });
+
+        RunTest("Merge_WhenNotMatchedInsert_GeneratesInsertAction", () =>
+        {
+            var merge = Sql.MergeInto(ProductsTable)
+                .Using(new Table("NewProducts", "dbo"))
+                .On(Products.Id == Sql.Col<int>("NewProducts.Id"))
+                .WhenNotMatchedByTarget().ThenInsert(Products.Id, Products.Name, Products.Price)
+                    .ValuesFromSource()
+                .Build();
+            var result = merge.Build();
+            AssertContainsDml(result.Sql, "WHEN NOT MATCHED BY TARGET THEN INSERT", "VALUES (SOURCE.[Id], SOURCE.[Name], SOURCE.[Price])");
+        });
+
+        RunTest("Merge_WhenMatchedAnd_GeneratesConditionalUpdate", () =>
+        {
+            var merge = Sql.MergeInto(ProductsTable)
+                .Using(new Table("ProductUpdates", "dbo"))
+                .On(Products.Id == Sql.Col<int>("ProductUpdates.Id"))
+                .WhenMatchedAnd(Products.Status == "Active").ThenUpdate()
+                    .Set(Products.Price, Sql.Col<decimal>("ProductUpdates.Price"))
+                    .Build();
+            var result = merge.Build();
+            AssertContainsDml(result.Sql, "WHEN MATCHED AND", "THEN UPDATE SET");
+        });
+
+        RunTest("Merge_MultipleWhenClauses_GeneratesAllClauses", () =>
+        {
+            var merge = Sql.MergeInto(ProductsTable)
+                .Using(new Table("ProductUpdates", "dbo"))
+                .On(Products.Id == Sql.Col<int>("ProductUpdates.Id"))
+                .WhenMatched().ThenUpdate()
+                    .Set(Products.Price, Sql.Col<decimal>("ProductUpdates.Price"))
+                    .And()
+                .WhenNotMatchedByTarget().ThenInsert(Products.Id, Products.Name, Products.Price)
+                    .ValuesFromSource()
+                    .And()
+                .WhenNotMatchedBySource().ThenDelete()
+                .Build();
+            var result = merge.Build();
+            AssertContainsDml(result.Sql, "WHEN MATCHED", "WHEN NOT MATCHED BY TARGET", "WHEN NOT MATCHED BY SOURCE");
+        });
+
+        RunTest("Merge_WithOutput_GeneratesOutputClause", () =>
+        {
+            var merge = Sql.MergeInto(ProductsTable)
+                .Using(new Table("ProductUpdates", "dbo"))
+                .On(Products.Id == Sql.Col<int>("ProductUpdates.Id"))
+                .WhenMatched().ThenUpdate()
+                    .Set(Products.Price, Sql.Col<decimal>("ProductUpdates.Price"))
+                    .Build()
+                .Output(Products.Id);
+            var result = merge.Build();
+            AssertContainsDml(result.Sql, "OUTPUT INSERTED.[Id]");
+        });
+
+        RunTest("Merge_UsingSubquery_GeneratesSubquerySource", () =>
+        {
+            var sourceQuery = Sql.From(new Table("TempProducts", "dbo"))
+                .Where(Sql.Col<decimal>("TempProducts.Price") > 0)
+                .Select(Sql.Col<int>("TempProducts.Id"), Sql.Col<string>("TempProducts.Name"), Sql.Col<decimal>("TempProducts.Price"));
+            var merge = Sql.MergeInto(ProductsTable)
+                .Using(sourceQuery, "src")
+                .On(Products.Id == Sql.Col<int>("src.Id"))
+                .WhenMatched().ThenUpdate()
+                    .Set(Products.Price, Sql.Col<decimal>("src.Price"))
+                    .Build();
+            var result = merge.Build();
+            AssertContainsDml(result.Sql, "USING (SELECT", ") AS [src]");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 19: DML Parameterization Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── DML Parameterization Tests ──");
+
+        RunTest("Insert_SqlInjection_Parameterized", () =>
+        {
+            var malicious = "'; DELETE FROM Products; --";
+            var insert = Sql.InsertInto(ProductsTable)
+                .Columns(Products.Name, Products.Price)
+                .Values(malicious, 99.99m);
+            var result = insert.Build();
+            AssertNotContainsDml(result.Sql, "DELETE");
+            Assert(result.Parameters["@p0"]?.ToString() == malicious, "Malicious string should be in parameter");
+        });
+
+        RunTest("Update_SqlInjection_Parameterized", () =>
+        {
+            var malicious = "'; DROP TABLE Products; --";
+            var update = Sql.Update(ProductsTable)
+                .Set(Products.Name, malicious)
+                .Where(Products.Id == 1);
+            var result = update.Build();
+            AssertNotContainsDml(result.Sql, "DROP TABLE");
+        });
+
+        RunTest("Delete_SqlInjection_Parameterized", () =>
+        {
+            var malicious = "1 OR 1=1; --";
+            var delete = Sql.DeleteFrom(ProductsTable)
+                .Where(Products.Name == malicious);
+            var result = delete.Build();
+            AssertNotContainsDml(result.Sql, "1=1");
+            Assert(result.Parameters.ContainsKey("@p0"), "Should use parameter");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
         // Print Summary
         // ═══════════════════════════════════════════════════════════════════════════
         Console.WriteLine();
@@ -905,5 +1253,27 @@ class Program
     static void Assert(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
+    }
+
+    static void AssertContainsDml(string sql, params string[] patterns)
+    {
+        foreach (var pattern in patterns)
+        {
+            if (!sql.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new Exception($"DML does not contain expected pattern: '{pattern}'\n\nSQL:\n{sql}");
+            }
+        }
+    }
+
+    static void AssertNotContainsDml(string sql, params string[] patterns)
+    {
+        foreach (var pattern in patterns)
+        {
+            if (sql.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new Exception($"DML contains unexpected pattern: '{pattern}'\n\nSQL:\n{sql}");
+            }
+        }
     }
 }

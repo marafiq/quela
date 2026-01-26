@@ -1,3 +1,4 @@
+using Quela.Dml;
 using Quela.Internal;
 
 namespace Quela;
@@ -122,6 +123,34 @@ public static class Sql
     /// </summary>
     public static SubqueryComparison<T> Some<T>(IQuery subquery)
         => new(subquery, "SOME");
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DML Operations (INSERT, UPDATE, DELETE, MERGE)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Starts an INSERT statement.
+    /// </summary>
+    public static IInsertInto InsertInto(Table table)
+        => new InsertBuilder(table);
+
+    /// <summary>
+    /// Starts an UPDATE statement.
+    /// </summary>
+    public static IUpdate Update(Table table)
+        => new UpdateBuilder(table);
+
+    /// <summary>
+    /// Starts a DELETE statement.
+    /// </summary>
+    public static IDelete DeleteFrom(Table table)
+        => new DeleteBuilder(table);
+
+    /// <summary>
+    /// Starts a MERGE statement (SQL Server upsert).
+    /// </summary>
+    public static IMergeInto MergeInto(Table table)
+        => new MergeBuilder(table);
 }
 
 /// <summary>
