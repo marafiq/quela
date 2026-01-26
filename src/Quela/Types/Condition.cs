@@ -41,36 +41,75 @@ public class Condition
 
     public Condition And(Condition other)
     {
-        var combinedInherited = CombineInheritedParams(InheritedParams, other.InheritedParams);
+        var (otherTemplate, combinedInherited) = CombineConditions(InheritedParams, other.Template, other.InheritedParams);
         return new Condition(
-            $"({Template}) AND ({other.Template})",
+            $"({Template}) AND ({otherTemplate})",
             Values.Concat(other.Values).ToList(),
             combinedInherited);
     }
 
     public Condition Or(Condition other)
     {
-        var combinedInherited = CombineInheritedParams(InheritedParams, other.InheritedParams);
+        var (otherTemplate, combinedInherited) = CombineConditions(InheritedParams, other.Template, other.InheritedParams);
         return new Condition(
-            $"({Template}) OR ({other.Template})",
+            $"({Template}) OR ({otherTemplate})",
             Values.Concat(other.Values).ToList(),
             combinedInherited);
     }
 
     public Condition Not() => new($"NOT ({Template})", Values.ToList(), InheritedParams);
 
-    private static Dictionary<string, object?>? CombineInheritedParams(
-        Dictionary<string, object?>? left,
-        Dictionary<string, object?>? right)
+    /// <summary>
+    /// Combines two conditions' inherited parameters, remapping the second condition's
+    /// parameters to avoid collisions with the first.
+    /// </summary>
+    private static (string RemappedTemplate, Dictionary<string, object?>? Combined) CombineConditions(
+        Dictionary<string, object?>? leftParams,
+        string rightTemplate,
+        Dictionary<string, object?>? rightParams)
     {
-        if (left == null && right == null) return null;
-        if (left == null) return right;
-        if (right == null) return left;
+        if (leftParams == null && rightParams == null)
+            return (rightTemplate, null);
+        if (leftParams == null)
+            return (rightTemplate, rightParams);
+        if (rightParams == null)
+            return (rightTemplate, leftParams);
 
-        var combined = new Dictionary<string, object?>(left);
-        foreach (var kvp in right)
-            combined[kvp.Key] = kvp.Value;
-        return combined;
+        // Find the highest parameter index in leftParams
+        var maxLeftIndex = leftParams.Keys
+            .Where(k => k.StartsWith("@p"))
+            .Select(k => int.TryParse(k.Substring(2), out var n) ? n : -1)
+            .DefaultIfEmpty(-1)
+            .Max();
+
+        // Remap rightParams to start after maxLeftIndex using two-pass approach
+        var combined = new Dictionary<string, object?>(leftParams);
+        var remappedTemplate = rightTemplate;
+        var nextIndex = maxLeftIndex + 1;
+
+        // Get params to remap, ordered by index
+        var paramList = rightParams.Keys
+            .Where(k => k.StartsWith("@p"))
+            .Select(k => (Key: k, Num: int.TryParse(k.Substring(2), out var n) ? n : -1))
+            .OrderByDescending(x => x.Num)
+            .ToList();
+
+        // First pass: replace with temporary placeholders (highest numbers first)
+        var tempPrefix = $"__combine_{Guid.NewGuid():N}_";
+        foreach (var (oldKey, _) in paramList)
+        {
+            remappedTemplate = remappedTemplate.Replace(oldKey, tempPrefix + oldKey);
+        }
+
+        // Second pass: replace temp placeholders with new names (lowest numbers first)
+        foreach (var (oldKey, _) in paramList.OrderBy(x => x.Num))
+        {
+            var newKey = $"@p{nextIndex++}";
+            combined[newKey] = rightParams[oldKey];
+            remappedTemplate = remappedTemplate.Replace(tempPrefix + oldKey, newKey);
+        }
+
+        return (remappedTemplate, combined);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

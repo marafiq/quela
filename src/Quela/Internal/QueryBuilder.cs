@@ -309,15 +309,61 @@ internal class QueryBuilder<T> :
 
     public IQuery<T> Select(params ISelectable[] columns)
     {
-        _select.AddRange(columns.Select(c => c.ToSql()));
+        foreach (var col in columns)
+        {
+            _select.Add(IncorporateSelectable(col));
+        }
         return this;
     }
 
     public IQuery<TResult> Select<TResult>(params ISelectable[] columns)
     {
-        _select.AddRange(columns.Select(c => c.ToSql()));
+        foreach (var col in columns)
+        {
+            _select.Add(IncorporateSelectable(col));
+        }
         // Return a new builder with the same state but different type
         return new QueryBuilder<TResult>(this);
+    }
+
+    private string IncorporateSelectable(ISelectable selectable)
+    {
+        // Handle selectable with subquery parameters
+        if (selectable is ISubquerySelectable subquerySelectable)
+        {
+            var (sql, parameters, alias) = subquerySelectable.GetSubquerySql();
+            var remappedSql = IncorporateSubqueryParams(sql, parameters);
+            return alias != null ? $"({remappedSql}) AS [{alias}]" : $"({remappedSql})";
+        }
+
+        return selectable.ToSql();
+    }
+
+    private string IncorporateSubqueryParams(string sql, Dictionary<string, object?> parameters)
+    {
+        // Use two-pass approach to avoid overlapping replacements
+        var paramList = parameters.Keys
+            .Where(k => k.StartsWith("@p"))
+            .Select(k => (Key: k, Num: int.TryParse(k.Substring(2), out var n) ? n : -1))
+            .OrderByDescending(x => x.Num)
+            .ToList();
+
+        // First pass: replace with temporary placeholders
+        var tempPrefix = $"__temp_{Guid.NewGuid():N}_";
+        foreach (var (oldKey, _) in paramList)
+        {
+            sql = sql.Replace(oldKey, tempPrefix + oldKey);
+        }
+
+        // Second pass: replace temp placeholders with new names (lowest numbers first)
+        foreach (var (oldKey, _) in paramList.OrderBy(x => x.Num))
+        {
+            var newKey = $"@p{_paramIndex++}";
+            _params[newKey] = parameters[oldKey];
+            sql = sql.Replace(tempPrefix + oldKey, newKey);
+        }
+
+        return sql;
     }
 
     public IQuery<T> SelectDistinct(params ISelectable[] columns)

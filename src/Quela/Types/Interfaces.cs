@@ -33,3 +33,14 @@ public interface IColumn : ISelectable, IGroupable
     string ColumnName { get; }
     string FullName { get; }
 }
+
+/// <summary>
+/// Interface for selectables that contain a subquery with parameters.
+/// </summary>
+public interface ISubquerySelectable : ISelectable
+{
+    /// <summary>
+    /// Gets the SQL, parameters, and optional alias from the subquery.
+    /// </summary>
+    (string Sql, Dictionary<string, object?> Parameters, string? Alias) GetSubquerySql();
+}

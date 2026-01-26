@@ -1326,6 +1326,725 @@ class Program
         });
 
         // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 21: Advanced Subquery Edge Cases
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Advanced Subquery Edge Cases ──");
+
+        RunTest("MultipleInSubqueries_ParametersNotSwapped", () =>
+        {
+            // Two IN subqueries with different parameter values
+            var subquery1 = Sql.From(ProductsTable)
+                .Where(Products.Price > 100m)  // @p0 = 100
+                .Select(Products.Id);
+            var subquery2 = Sql.From(ProductsTable)
+                .Where(Products.Price < 50m)   // @p1 = 50
+                .Select(Products.CategoryId);
+
+            var query = Sql.From(OrderItemsTable)
+                .Where(OrderItems.ProductId.In(subquery1))
+                .And(OrderItems.OrderId.In(subquery2))
+                .Select(OrderItems.Amount);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+
+            // Verify the values didn't get swapped
+            var values = result.Parameters.Values.Cast<object>().OrderBy(x => Convert.ToDecimal(x)).ToList();
+            Assert(values.Count == 2, $"Expected 2 parameters, got {values.Count}");
+            Assert(Convert.ToDecimal(values[0]) == 50m, $"Expected 50, got {values[0]}");
+            Assert(Convert.ToDecimal(values[1]) == 100m, $"Expected 100, got {values[1]}");
+        });
+
+        RunTest("ThreeNestedSubqueries_ParametersPreserved", () =>
+        {
+            // Three levels of nesting
+            var innermost = Sql.From(OrderItemsTable)
+                .Where(OrderItems.Quantity > 10)  // param 1
+                .Select(OrderItems.ProductId);
+            var middle = Sql.From(ProductsTable)
+                .Where(Products.Id.In(innermost))
+                .And(Products.Price > 200m)       // param 2
+                .Select(Products.CategoryId);
+            var query = Sql.From(CategoriesTable)
+                .Where(Categories.Id.In(middle))
+                .And(Categories.Name == "Electronics")  // param 3
+                .Select(Categories.Name);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 3, $"Expected 3 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("SubqueryWithMultipleConditions_AllParametersIncluded", () =>
+        {
+            var subquery = Sql.From(ProductsTable)
+                .Where(Products.Price > 100m)
+                .And(Products.Price < 500m)
+                .And(Products.Status == "Active")
+                .And(Products.Name.Like("%Widget%"))
+                .Select(Products.Id);
+
+            var query = Sql.From(OrderItemsTable)
+                .Where(OrderItems.ProductId.In(subquery))
+                .Select(OrderItems.Amount);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 4, $"Expected 4 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("ExistsWithComplexSubquery_AllParametersIncluded", () =>
+        {
+            var subquery = Sql.From(OrderItemsTable)
+                .Where(OrderItems.ProductId == Products.Id)
+                .And(OrderItems.Quantity > 5)
+                .And(OrderItems.Amount > 100m)
+                .Select(Sql.Literal(1));
+
+            var query = Sql.From(ProductsTable)
+                .Where(Sql.Exists(subquery))
+                .And(Products.Status == "Active")
+                .Select(Products.Name);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 3, $"Expected 3 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("NotExistsWithParameters_AllParametersIncluded", () =>
+        {
+            var subquery = Sql.From(OrdersTable)
+                .Where(Orders.CustomerId == Customers.Id)
+                .And(Orders.Total > 1000m)
+                .Select(Sql.Literal(1));
+
+            var query = Sql.From(CustomersTable)
+                .Where(Sql.NotExists(subquery))
+                .Select(Customers.Name);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 1, $"Expected 1 parameter, got {result.Parameters.Count}");
+        });
+
+        RunTest("InAndNotInSubqueries_BothParametersIncluded", () =>
+        {
+            var subquery1 = Sql.From(ProductsTable)
+                .Where(Products.Price > 100m)
+                .Select(Products.Id);
+            var subquery2 = Sql.From(ProductsTable)
+                .Where(Products.Status == "Discontinued")
+                .Select(Products.Id);
+
+            var query = Sql.From(OrderItemsTable)
+                .Where(OrderItems.ProductId.In(subquery1))
+                .And(OrderItems.ProductId.NotIn(subquery2))
+                .Select(OrderItems.Amount);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 2, $"Expected 2 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("OrConditionWithSubqueries_ParametersPreserved", () =>
+        {
+            var subquery1 = Sql.From(ProductsTable)
+                .Where(Products.Price > 1000m)
+                .Select(Products.Id);
+            var subquery2 = Sql.From(ProductsTable)
+                .Where(Products.Status == "Featured")
+                .Select(Products.Id);
+
+            var query = Sql.From(OrderItemsTable)
+                .Where(OrderItems.ProductId.In(subquery1) | OrderItems.ProductId.In(subquery2))
+                .Select(OrderItems.Amount);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 2, $"Expected 2 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("JoinWithSubqueryParameters_ParametersPreserved", () =>
+        {
+            var subquery = Sql.From(ProductsTable)
+                .Where(Products.Price > 500m)
+                .And(Products.Status == "Premium")
+                .Select(Products.Id, Products.Name, Products.CategoryId);
+
+            var query = Sql.From(CategoriesTable)
+                .Join(subquery, "PremiumProducts").On(Categories.Id == Sql.Col<int>("PremiumProducts.CategoryId"))
+                .Select(Categories.Name, Sql.Col<string>("PremiumProducts.Name"));
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 2, $"Expected 2 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("LeftJoinWithSubqueryParameters_ParametersPreserved", () =>
+        {
+            var subquery = Sql.From(OrderItemsTable)
+                .Where(OrderItems.Quantity > 10)
+                .GroupBy(OrderItems.ProductId)
+                .Select(OrderItems.ProductId, Fn.Sum(OrderItems.Amount).As("TotalAmount"));
+
+            var query = Sql.From(ProductsTable)
+                .LeftJoin(subquery, "Sales").On(Products.Id == Sql.Col<int>("Sales.ProductId"))
+                .Where(Products.Price > 100m)
+                .Select(Products.Name, Sql.Col<decimal?>("Sales.TotalAmount"));
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 2, $"Expected 2 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("MultipleCtes_AllParametersPreserved", () =>
+        {
+            var query = Sql
+                .With("Expensive", () => Sql.From(ProductsTable)
+                    .Where(Products.Price > 500m)
+                    .Select(Products.Id, Products.Name, Products.CategoryId))
+                .With("ActiveCustomers", () => Sql.From(CustomersTable)
+                    .Where(Customers.Status == "Active")
+                    .Select(Customers.Id, Customers.Name))
+                .From(Sql.Cte("Expensive"))
+                .Join(Sql.Cte("ActiveCustomers")).On(Sql.Col<int>("Expensive.Id") == Sql.Col<int>("ActiveCustomers.Id"))
+                .SelectAll();
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 2, $"Expected 2 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("CteReferencedMultipleTimes_ParametersCorrect", () =>
+        {
+            var query = Sql
+                .With("PremiumProducts", () => Sql.From(ProductsTable)
+                    .Where(Products.Price > 1000m)
+                    .Select(Products.Id, Products.CategoryId))
+                .From(Sql.Cte("PremiumProducts"))
+                .SelectAll();
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 1, $"Expected 1 parameter, got {result.Parameters.Count}");
+        });
+
+        RunTest("UnionAllWithDifferentParameters_AllPreserved", () =>
+        {
+            var q1 = Sql.From(ProductsTable)
+                .Where(Products.Price > 500m)
+                .Select(Products.Id, Products.Name);
+            var q2 = Sql.From(ProductsTable)
+                .Where(Products.Price < 10m)
+                .Select(Products.Id, Products.Name);
+            var q3 = Sql.From(ProductsTable)
+                .Where(Products.Status == "Featured")
+                .Select(Products.Id, Products.Name);
+
+            // Chain two unions (UnionAll returns IOrderBy which can Select then result is IQuery)
+            var combined = q1.UnionAll(q2).Select(Sql.All);
+            var query = combined.UnionAll(q3).Select(Sql.All);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 3, $"Expected 3 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("SubqueryFromClause_WithWhereParameters_AllPreserved", () =>
+        {
+            var subquery = Sql.From(ProductsTable)
+                .Where(Products.Price > 100m)
+                .And(Products.Status == "Active")
+                .Select(Products.Id, Products.Name, Products.CategoryId);
+
+            var query = Sql.From(subquery, "FilteredProducts")
+                .Where(Sql.Col<int>("FilteredProducts.CategoryId") == 5)
+                .Select(Sql.Col<string>("FilteredProducts.Name"));
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 3, $"Expected 3 parameters, got {result.Parameters.Count}");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 22: DML Advanced Edge Cases
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── DML Advanced Edge Cases ──");
+
+        RunTest("InsertSelectWithMultipleConditions_AllParametersPreserved", () =>
+        {
+            var selectQuery = Sql.From(ProductsTable)
+                .Where(Products.Price > 100m)
+                .And(Products.Price < 1000m)
+                .And(Products.Status == "Active")
+                .And(Products.CategoryId == 5)
+                .Select(Products.Name, Products.Price, Products.CategoryId);
+
+            var insert = Sql.InsertInto(new Table("Archive", "dbo"))
+                .Columns(Products.Name, Products.Price, Products.CategoryId)
+                .Select(selectQuery);
+
+            var result = insert.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 4, $"Expected 4 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("DeleteWhereInWithComplexSubquery_AllParametersPreserved", () =>
+        {
+            var subquery = Sql.From(OrderItemsTable)
+                .Where(OrderItems.Quantity < 5)
+                .And(OrderItems.Amount < 10m)
+                .GroupBy(OrderItems.ProductId)
+                .Having(Fn.Count() > 3)
+                .Select(OrderItems.ProductId);
+
+            var delete = Sql.DeleteFrom(ProductsTable)
+                .WhereIn(Products.Id, subquery);
+
+            var result = delete.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 3, $"Expected 3 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("UpdateWithWhereInSubquery_ParametersPreserved", () =>
+        {
+            var subquery = Sql.From(OrderItemsTable)
+                .Where(OrderItems.Quantity > 100)
+                .Select(OrderItems.ProductId);
+
+            var update = Sql.Update(ProductsTable)
+                .Set(Products.Status, "Popular")
+                .Where(Products.Id.In(subquery))
+                .And(Products.Price > 50m);
+
+            var result = update.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 3, $"Expected 3 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("MergeWithComplexSourceQuery_AllParametersPreserved", () =>
+        {
+            var sourceQuery = Sql.From(ProductsTable)
+                .Where(Products.Price > 100m)
+                .And(Products.Status == "Active")
+                .Select(Products.Id, Products.Name, Products.Price);
+
+            var merge = Sql.MergeInto(new Table("TargetProducts", "dbo"))
+                .Using(sourceQuery, "src")
+                .On(Sql.Col<int>("TargetProducts.Id") == Sql.Col<int>("src.Id"))
+                .WhenMatched()
+                .ThenUpdate()
+                .Set(Products.Price, Sql.Col<decimal>("src.Price"))
+                .Build();
+
+            var result = merge.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 2, $"Expected 2 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("UpdateFromWithSubqueryJoin_ParametersPreserved", () =>
+        {
+            var update = Sql.Update(ProductsTable)
+                .Set(Products.Status, "TopSeller")
+                .From(OrderItemsTable)
+                .Where((Products.Id == OrderItems.ProductId) & (OrderItems.Quantity > 1000));
+
+            var result = update.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 2, $"Expected 2 parameters, got {result.Parameters.Count}");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 23: Parameter Value Integrity Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Parameter Value Integrity Tests ──");
+
+        RunTest("ParameterValues_NotSwappedInUnion", () =>
+        {
+            var q1 = Sql.From(ProductsTable)
+                .Where(Products.Price == 111.11m)
+                .Select(Products.Id);
+            var q2 = Sql.From(ProductsTable)
+                .Where(Products.Price == 222.22m)
+                .Select(Products.Id);
+
+            var query = q1.Union(q2).Select(Sql.All);
+            var result = query.Build();
+
+            // Get values sorted by parameter name to check ordering
+            var sortedParams = result.Parameters.OrderBy(p => p.Key).ToList();
+            var v0 = Convert.ToDecimal(sortedParams[0].Value);
+            var v1 = Convert.ToDecimal(sortedParams[1].Value);
+
+            // The first value in the SQL should be first in parameters
+            var firstInSql = result.Sql.IndexOf("@p0") < result.Sql.IndexOf("@p1");
+            Assert(firstInSql, "Parameters should appear in order");
+            Assert(v0 == 111.11m || v1 == 111.11m, "111.11 should be present");
+            Assert(v0 == 222.22m || v1 == 222.22m, "222.22 should be present");
+        });
+
+        RunTest("ParameterValues_NotSwappedInNestedSubqueries", () =>
+        {
+            var inner = Sql.From(ProductsTable)
+                .Where(Products.Price == 50m)
+                .Select(Products.Id);
+            var outer = Sql.From(OrdersTable)
+                .Where(Orders.CustomerId.In(inner))
+                .And(Orders.Status == "Active")
+                .Select(Orders.Total);
+
+            var result = outer.Build();
+
+            // Verify 50m and "Active" are both present and not swapped
+            var decimalParam = result.Parameters.Values.FirstOrDefault(v => v is decimal);
+            var stringParam = result.Parameters.Values.FirstOrDefault(v => v is string);
+
+            Assert(decimalParam != null && Convert.ToDecimal(decimalParam) == 50m, "Decimal value 50 should be present");
+            Assert(stringParam != null && stringParam.ToString() == "Active", "String value 'Active' should be present");
+        });
+
+        RunTest("ParameterValues_PreservedInCte", () =>
+        {
+            var query = Sql.With("Test", () =>
+                    Sql.From(ProductsTable)
+                        .Where(Products.Price == 999.99m)
+                        .And(Products.Name == "TestProduct")
+                        .Select(Products.Id))
+                .From(Sql.Cte("Test"))
+                .SelectAll();
+
+            var result = query.Build();
+
+            var decimalParam = result.Parameters.Values.FirstOrDefault(v => v is decimal);
+            var stringParam = result.Parameters.Values.FirstOrDefault(v => v is string);
+
+            Assert(decimalParam != null && Convert.ToDecimal(decimalParam) == 999.99m, "Decimal 999.99 should be present");
+            Assert(stringParam != null && stringParam.ToString() == "TestProduct", "String 'TestProduct' should be present");
+        });
+
+        RunTest("ParameterValues_ManyParametersOrdered", () =>
+        {
+            // Create a query with 10+ parameters to ensure ordering is correct
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Price > 1m)
+                .And(Products.Price < 10m)
+                .And(Products.Status == "A")
+                .And(Products.Name == "B")
+                .And(Products.CategoryId == 100)
+                .And(Products.CategoryId != 200)
+                .Select(Products.Id);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+
+            // Check all values are present
+            var values = result.Parameters.Values.ToList();
+            Assert(values.Contains(1m), "Should contain 1m");
+            Assert(values.Contains(10m), "Should contain 10m");
+            Assert(values.Contains("A"), "Should contain 'A'");
+            Assert(values.Contains("B"), "Should contain 'B'");
+            Assert(values.Contains(100), "Should contain 100");
+            Assert(values.Contains(200), "Should contain 200");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 24: Complex Condition Chains
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Complex Condition Chains ──");
+
+        RunTest("ConditionChain_AndOrWithSubqueries", () =>
+        {
+            var subquery1 = Sql.From(ProductsTable)
+                .Where(Products.Price > 100m)
+                .Select(Products.Id);
+            var subquery2 = Sql.From(ProductsTable)
+                .Where(Products.Status == "Premium")
+                .Select(Products.Id);
+
+            var query = Sql.From(OrderItemsTable)
+                .Where(OrderItems.ProductId.In(subquery1) & (OrderItems.Quantity > 5) | OrderItems.ProductId.In(subquery2))
+                .Select(OrderItems.Amount);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 3, $"Expected 3 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("NotConditionWithSubquery_ParametersPreserved", () =>
+        {
+            var subquery = Sql.From(OrderItemsTable)
+                .Where(OrderItems.Quantity > 10)
+                .Select(OrderItems.ProductId);
+
+            var query = Sql.From(ProductsTable)
+                .Where(!Products.Id.In(subquery))
+                .And(Products.Price > 50m)
+                .Select(Products.Name);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 2, $"Expected 2 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("MultipleOrConditionsWithSubqueries_AllParametersPreserved", () =>
+        {
+            var sub1 = Sql.From(ProductsTable).Where(Products.Price > 100m).Select(Products.Id);
+            var sub2 = Sql.From(ProductsTable).Where(Products.Price > 200m).Select(Products.Id);
+            var sub3 = Sql.From(ProductsTable).Where(Products.Price > 300m).Select(Products.Id);
+
+            var query = Sql.From(OrderItemsTable)
+                .Where(OrderItems.ProductId.In(sub1) | OrderItems.ProductId.In(sub2) | OrderItems.ProductId.In(sub3))
+                .Select(OrderItems.Amount);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 3, $"Expected 3 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("NestedConditionGroups_ParametersPreserved", () =>
+        {
+            // ((A AND B) OR (C AND D)) AND E
+            var condA = Products.Price > 100m;
+            var condB = Products.Price < 200m;
+            var condC = Products.Status == "Active";
+            var condD = Products.Name.Like("%Widget%");
+            var condE = Products.CategoryId == 5;
+
+            var query = Sql.From(ProductsTable)
+                .Where(((condA & condB) | (condC & condD)) & condE)
+                .Select(Products.Id);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 5, $"Expected 5 parameters, got {result.Parameters.Count}");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 25: Edge Cases for HAVING and GROUP BY
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── HAVING and GROUP BY Edge Cases ──");
+
+        RunTest("HavingWithMultipleAggregates_ParametersPreserved", () =>
+        {
+            // Test HAVING with multiple aggregate conditions
+            var query = Sql.From(ProductsTable)
+                .GroupBy(Products.CategoryId)
+                .Having((Fn.Avg(Products.Price) > 100m) & (Fn.Max(Products.Price) < 1000m))
+                .Select(Products.CategoryId, Fn.Avg(Products.Price).As("AvgPrice"));
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 2, $"Expected 2 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("GroupByHavingWithMultipleConditions_AllParametersPreserved", () =>
+        {
+            var query = Sql.From(OrderItemsTable)
+                .GroupBy(OrderItems.ProductId)
+                .Having((Fn.Sum(OrderItems.Amount) > 1000m) & (Fn.Count() > 5))
+                .Select(OrderItems.ProductId, Fn.Sum(OrderItems.Amount).As("Total"));
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 2, $"Expected 2 parameters, got {result.Parameters.Count}");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 26: Scalar Subquery Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Scalar Subquery Tests ──");
+
+        RunTest("ScalarSubquery_EqualityComparison", () =>
+        {
+            var subquery = Sql.From(ProductsTable)
+                .Where(Products.Status == "Reference")
+                .Select(Fn.Max(Products.Price));
+
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Price == Sql.Scalar<decimal>(subquery))
+                .Select(Products.Name);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+        });
+
+        RunTest("ScalarSubquery_GreaterThanComparison", () =>
+        {
+            var subquery = Sql.From(ProductsTable)
+                .Where(Products.CategoryId == 5)
+                .Select(Fn.Avg(Products.Price));
+
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Price > Sql.Scalar<decimal>(subquery))
+                .And(Products.CategoryId != 5)
+                .Select(Products.Name);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 2, $"Expected 2 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("ScalarSubquery_InSelect", () =>
+        {
+            var subquery = Sql.From(OrderItemsTable)
+                .Where(OrderItems.ProductId == Products.Id)
+                .Select(Fn.Sum(OrderItems.Amount));
+
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Price > 100m)
+                .Select(Products.Name, Sql.Scalar<decimal>(subquery).As("TotalSales"));
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 27: Stress Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Stress Tests ──");
+
+        RunTest("ManyParameters_20Plus_AllPreserved", () =>
+        {
+            // Build a query with 20+ parameters
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Price > 1m)
+                .And(Products.Price < 2m)
+                .And(Products.Price > 3m)
+                .And(Products.Price < 4m)
+                .And(Products.Price > 5m)
+                .And(Products.Price < 6m)
+                .And(Products.Price > 7m)
+                .And(Products.Price < 8m)
+                .And(Products.Price > 9m)
+                .And(Products.Price < 10m)
+                .And(Products.Status == "s1")
+                .And(Products.Status == "s2")
+                .And(Products.Status == "s3")
+                .And(Products.Status == "s4")
+                .And(Products.Status == "s5")
+                .And(Products.Name == "n1")
+                .And(Products.Name == "n2")
+                .And(Products.Name == "n3")
+                .And(Products.Name == "n4")
+                .And(Products.Name == "n5")
+                .Select(Products.Id);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 20, $"Expected 20 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("DeepSubqueryNesting_5Levels", () =>
+        {
+            var level5 = Sql.From(ProductsTable).Where(Products.Price > 5m).Select(Products.Id);
+            var level4 = Sql.From(ProductsTable).Where(Products.Id.In(level5)).And(Products.Price > 4m).Select(Products.Id);
+            var level3 = Sql.From(ProductsTable).Where(Products.Id.In(level4)).And(Products.Price > 3m).Select(Products.Id);
+            var level2 = Sql.From(ProductsTable).Where(Products.Id.In(level3)).And(Products.Price > 2m).Select(Products.Id);
+            var level1 = Sql.From(ProductsTable).Where(Products.Id.In(level2)).And(Products.Price > 1m).Select(Products.Name);
+
+            var result = level1.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 5, $"Expected 5 parameters, got {result.Parameters.Count}");
+        });
+
+        RunTest("ComplexUnionChain_AllParametersPreserved", () =>
+        {
+            var q1 = Sql.From(ProductsTable).Where(Products.Price > 100m).Select(Products.Id, Products.Name);
+            var q2 = Sql.From(ProductsTable).Where(Products.Price > 200m).Select(Products.Id, Products.Name);
+            var q3 = Sql.From(ProductsTable).Where(Products.Price > 300m).Select(Products.Id, Products.Name);
+            var q4 = Sql.From(ProductsTable).Where(Products.Price > 400m).Select(Products.Id, Products.Name);
+            var q5 = Sql.From(ProductsTable).Where(Products.Price > 500m).Select(Products.Id, Products.Name);
+
+            // Chain unions (Union returns IOrderBy, need Select to get IQuery)
+            var u1 = q1.Union(q2).Select(Sql.All);
+            var u2 = u1.Union(q3).Select(Sql.All);
+            var u3 = u2.Union(q4).Select(Sql.All);
+            var query = u3.Union(q5).Select(Sql.All);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+            Assert(result.Parameters.Count == 5, $"Expected 5 parameters, got {result.Parameters.Count}");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 28: Specific Bug Regression Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Bug Regression Tests ──");
+
+        RunTest("ParameterRemapping_NoCollisions", () =>
+        {
+            // This tests the bug where @p1 was being replaced before @p10 causing issues
+            var subquery = Sql.From(ProductsTable)
+                .Where(Products.Price > 1m)
+                .And(Products.Price > 2m)
+                .And(Products.Price > 3m)
+                .And(Products.Price > 4m)
+                .And(Products.Price > 5m)
+                .And(Products.Price > 6m)
+                .And(Products.Price > 7m)
+                .And(Products.Price > 8m)
+                .And(Products.Price > 9m)
+                .And(Products.Price > 10m)
+                .And(Products.Price > 11m)
+                .Select(Products.Id);
+
+            var query = Sql.From(OrderItemsTable)
+                .Where(OrderItems.ProductId.In(subquery))
+                .And(OrderItems.Amount > 100m)
+                .Select(OrderItems.Amount);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+
+            // Verify all values are present and distinct (except possibly 11m and 100m which are different)
+            var decimals = result.Parameters.Values.Where(v => v is decimal).Select(v => (decimal)v!).ToList();
+            Assert(decimals.Count == 12, $"Expected 12 decimal parameters, got {decimals.Count}");
+        });
+
+        RunTest("BarePlaceholder_NotReplacedInsideExisting", () =>
+        {
+            // Test that @p isn't matched inside @p0, @p1, etc.
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Name == "test1")
+                .And(Products.Name == "test2")
+                .And(Products.Name == "test3")
+                .Select(Products.Id);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+
+            // Ensure no bare @p remains
+            Assert(!result.Sql.Contains("@p "), "Should not contain '@p ' (bare placeholder)");
+            Assert(!result.Sql.Contains("@p)"), "Should not contain '@p)' (bare placeholder)");
+        });
+
+        RunTest("SubqueryParameterRemapping_CorrectOrder", () =>
+        {
+            // Subquery has @p0, @p1, main query adds more
+            // Ensure after remapping, all parameters are sequential
+            var subquery = Sql.From(ProductsTable)
+                .Where(Products.Price > 100m)
+                .And(Products.Status == "Active")
+                .Select(Products.Id);
+
+            var query = Sql.From(OrderItemsTable)
+                .Where(OrderItems.ProductId.In(subquery))
+                .And(OrderItems.Quantity > 10)
+                .And(OrderItems.Amount > 50m)
+                .Select(OrderItems.Amount);
+
+            var result = query.Build();
+            AssertParametersMatchSql(result.Sql, result.Parameters);
+
+            // Verify parameters are @p0 through @p3
+            Assert(result.Parameters.ContainsKey("@p0"), "Should have @p0");
+            Assert(result.Parameters.ContainsKey("@p1"), "Should have @p1");
+            Assert(result.Parameters.ContainsKey("@p2"), "Should have @p2");
+            Assert(result.Parameters.ContainsKey("@p3"), "Should have @p3");
+            Assert(result.Parameters.Count == 4, $"Expected exactly 4 parameters, got {result.Parameters.Count}");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
         // Print Summary
         // ═══════════════════════════════════════════════════════════════════════════
         Console.WriteLine();

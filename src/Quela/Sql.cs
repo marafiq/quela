@@ -107,6 +107,16 @@ public static class Sql
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Scalar Subquery
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Creates a scalar subquery that returns a single value for use in expressions.
+    /// </summary>
+    public static ScalarSubquery<T> Scalar<T>(IQuery subquery)
+        => new(subquery);
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // ANY / ALL / SOME for subquery comparisons
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -198,4 +208,89 @@ public class SubqueryComparison<T>
 
     public override bool Equals(object? obj) => obj is SubqueryComparison<T> other && _subquery == other._subquery;
     public override int GetHashCode() => _subquery.GetHashCode();
+}
+
+/// <summary>
+/// Wrapper for scalar subqueries that return a single value.
+/// </summary>
+public class ScalarSubquery<T> : ISubquerySelectable
+{
+    private readonly IQuery _subquery;
+
+    public ScalarSubquery(IQuery subquery)
+    {
+        _subquery = subquery;
+    }
+
+    /// <summary>
+    /// Gets the SQL and parameters from the subquery.
+    /// </summary>
+    internal (string Sql, Dictionary<string, object?> Parameters) GetSubquery()
+    {
+        var result = _subquery.Build();
+        return (result.Sql, new Dictionary<string, object?>(result.Parameters));
+    }
+
+    public (string Sql, Dictionary<string, object?> Parameters, string? Alias) GetSubquerySql()
+    {
+        var (sql, parameters) = GetSubquery();
+        return (sql, parameters, null);
+    }
+
+    public string ToSql() => $"({_subquery.Build().Sql})";
+
+    /// <summary>
+    /// Adds an alias to the scalar subquery for use in SELECT.
+    /// </summary>
+    public AliasedScalarSubquery<T> As(string alias) => new(this, alias);
+
+    private static Condition CreateCondition(Column<T> col, ScalarSubquery<T> sub, string op)
+    {
+        var (sql, parameters) = sub.GetSubquery();
+        return new Condition($"{col.FullName} {op} ({sql})", parameters);
+    }
+
+    public static Condition operator ==(Column<T> col, ScalarSubquery<T> sub)
+        => CreateCondition(col, sub, "=");
+
+    public static Condition operator !=(Column<T> col, ScalarSubquery<T> sub)
+        => CreateCondition(col, sub, "<>");
+
+    public static Condition operator >(Column<T> col, ScalarSubquery<T> sub)
+        => CreateCondition(col, sub, ">");
+
+    public static Condition operator <(Column<T> col, ScalarSubquery<T> sub)
+        => CreateCondition(col, sub, "<");
+
+    public static Condition operator >=(Column<T> col, ScalarSubquery<T> sub)
+        => CreateCondition(col, sub, ">=");
+
+    public static Condition operator <=(Column<T> col, ScalarSubquery<T> sub)
+        => CreateCondition(col, sub, "<=");
+
+    public override bool Equals(object? obj) => obj is ScalarSubquery<T> other && _subquery == other._subquery;
+    public override int GetHashCode() => _subquery.GetHashCode();
+}
+
+/// <summary>
+/// Aliased scalar subquery for use in SELECT clause.
+/// </summary>
+public class AliasedScalarSubquery<T> : ISubquerySelectable
+{
+    private readonly ScalarSubquery<T> _subquery;
+    private readonly string _alias;
+
+    public AliasedScalarSubquery(ScalarSubquery<T> subquery, string alias)
+    {
+        _subquery = subquery;
+        _alias = alias;
+    }
+
+    public string ToSql() => $"{_subquery.ToSql()} AS [{_alias}]";
+
+    public (string Sql, Dictionary<string, object?> Parameters, string? Alias) GetSubquerySql()
+    {
+        var (sql, parameters) = _subquery.GetSubquery();
+        return (sql, parameters, _alias);
+    }
 }
