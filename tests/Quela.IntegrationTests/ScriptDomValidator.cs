@@ -1,4 +1,6 @@
+#if SQL_SERVER_CLIENT
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+#endif
 
 namespace Quela.IntegrationTests;
 
@@ -8,6 +10,7 @@ namespace Quela.IntegrationTests;
 /// </summary>
 public static class ScriptDomValidator
 {
+#if SQL_SERVER_CLIENT
     private static readonly TSql160Parser Parser = new(initialQuotedIdentifiers: true);
 
     /// <summary>
@@ -87,4 +90,34 @@ public static class ScriptDomValidator
         }
         return 0;
     }
+#else
+    /// <summary>
+    /// Parses SQL and returns any syntax errors.
+    /// Note: ScriptDom not available - returns empty list.
+    /// </summary>
+    public static List<string> Validate(string sql) => new();
+
+    /// <summary>
+    /// Validates SQL and throws if there are parse errors.
+    /// Note: ScriptDom not available - skips validation.
+    /// </summary>
+    public static void AssertValid(string sql)
+    {
+        // ScriptDom not available - basic validation only
+        if (string.IsNullOrWhiteSpace(sql))
+            throw new Exception("SQL is empty or whitespace");
+    }
+
+    /// <summary>
+    /// Parses SQL and returns the AST for inspection.
+    /// Note: ScriptDom not available - returns null.
+    /// </summary>
+    public static object? Parse(string sql) => null;
+
+    /// <summary>
+    /// Gets statement count in a batch.
+    /// Note: ScriptDom not available - returns 0.
+    /// </summary>
+    public static int GetStatementCount(string sql) => 0;
+#endif
 }

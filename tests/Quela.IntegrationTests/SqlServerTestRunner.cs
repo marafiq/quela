@@ -1,4 +1,6 @@
+#if SQL_SERVER_CLIENT
 using Microsoft.Data.SqlClient;
+#endif
 
 namespace Quela.IntegrationTests;
 
@@ -7,6 +9,7 @@ namespace Quela.IntegrationTests;
 /// </summary>
 public class SqlServerTestRunner : IDisposable
 {
+#if SQL_SERVER_CLIENT
     private readonly SqlConnection _connection;
     private readonly string _testDbName;
     private bool _disposed;
@@ -272,4 +275,60 @@ public class SqlServerTestRunner : IDisposable
             _connection.Dispose();
         }
     }
+#else
+    /// <summary>
+    /// Creates a test runner with the given connection string.
+    /// Note: SQL Server client not available - this is a stub.
+    /// </summary>
+    public SqlServerTestRunner(string connectionString)
+    {
+        throw new NotSupportedException("SQL Server client not available (offline build)");
+    }
+
+    /// <summary>
+    /// Initializes the test database with schema.
+    /// Note: SQL Server client not available - this is a stub.
+    /// </summary>
+    public Task InitializeAsync() => throw new NotSupportedException("SQL Server client not available");
+
+    /// <summary>
+    /// Executes a query built with Quela and returns the results.
+    /// Note: SQL Server client not available - this is a stub.
+    /// </summary>
+    public Task<List<Dictionary<string, object?>>> ExecuteQueryAsync(IQuery query) => throw new NotSupportedException();
+
+    /// <summary>
+    /// Executes raw SQL with parameters and returns results.
+    /// Note: SQL Server client not available - this is a stub.
+    /// </summary>
+    public Task<List<Dictionary<string, object?>>> ExecuteQueryAsync(
+        string sql,
+        IReadOnlyDictionary<string, object?> parameters) => throw new NotSupportedException();
+
+    /// <summary>
+    /// Executes SQL and returns scalar result.
+    /// Note: SQL Server client not available - this is a stub.
+    /// </summary>
+    public Task<T?> ExecuteScalarAsync<T>(IQuery query) => throw new NotSupportedException();
+
+    /// <summary>
+    /// Executes non-query SQL.
+    /// Note: SQL Server client not available - this is a stub.
+    /// </summary>
+    public Task<int> ExecuteNonQueryAsync(string sql) => throw new NotSupportedException();
+
+    /// <summary>
+    /// Verifies that a query executes without error.
+    /// Note: SQL Server client not available - this is a stub.
+    /// </summary>
+    public Task AssertExecutesAsync(IQuery query) => throw new NotSupportedException();
+
+    /// <summary>
+    /// Verifies query returns expected row count.
+    /// Note: SQL Server client not available - this is a stub.
+    /// </summary>
+    public Task AssertRowCountAsync(IQuery query, int expectedCount) => throw new NotSupportedException();
+
+    public void Dispose() { }
+#endif
 }

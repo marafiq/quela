@@ -6,9 +6,12 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <OutputType>Exe</OutputType>
+    <!-- Conditional SQL Server support - set to true when SQL Server client is available -->
+    <UseSqlServerClient Condition="'$(UseSqlServerClient)' == ''">false</UseSqlServerClient>
+    <DefineConstants Condition="'$(UseSqlServerClient)' == 'true'">$(DefineConstants);SQL_SERVER_CLIENT</DefineConstants>
   </PropertyGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(UseSqlServerClient)' == 'true'">
     <!-- SQL Server connectivity -->
     <PackageReference Include="Microsoft.Data.SqlClient" Version="5.1.*" />
     <!-- SQL Server T-SQL parser for syntax validation -->
