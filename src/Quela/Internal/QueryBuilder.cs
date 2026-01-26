@@ -1,6 +1,4 @@
-using System.Data;
 using System.Text;
-using Dapper;
 
 namespace Quela.Internal;
 
@@ -485,28 +483,6 @@ internal class QueryBuilder<T> :
     }
 
     public string ToSql() => Build().Sql;
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Dapper Execution
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    public async Task<IEnumerable<T>> QueryAsync(IDbConnection connection)
-    {
-        var query = Build();
-        return await connection.QueryAsync<T>(query.Sql, query.Parameters);
-    }
-
-    public async Task<T?> FirstOrDefaultAsync(IDbConnection connection)
-    {
-        var query = Build();
-        return await connection.QueryFirstOrDefaultAsync<T>(query.Sql, query.Parameters);
-    }
-
-    public async Task<T> SingleAsync(IDbConnection connection)
-    {
-        var query = Build();
-        return await connection.QuerySingleAsync<T>(query.Sql, query.Parameters);
-    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Helper Methods

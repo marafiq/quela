@@ -37,13 +37,13 @@ public static class Sql
     /// <summary>
     /// Starts a query with a CTE (Common Table Expression).
     /// </summary>
-    public static ICte With(string name, Func<IFrom<Row>> queryBuilder)
+    public static ICte With(string name, Func<IQuery> queryBuilder)
         => new CteBuilder(name, queryBuilder);
 
     /// <summary>
     /// Starts a query with a recursive CTE.
     /// </summary>
-    public static ICte WithRecursive(string name, Func<IFrom<Row>> anchor, Func<IFrom<Row>> recursive)
+    public static ICte WithRecursive(string name, Func<IQuery> anchor, Func<IQuery> recursive)
         => new CteBuilder(name, anchor, recursive);
 
     /// <summary>
@@ -112,9 +112,9 @@ public static class Sql
         => new(subquery, "ANY");
 
     /// <summary>
-    /// Creates a subquery wrapper for ALL comparison.
+    /// Creates a subquery wrapper for ALL comparison (col > ALL (subquery)).
     /// </summary>
-    public static SubqueryComparison<T> All<T>(IQuery subquery)
+    public static SubqueryComparison<T> AllOf<T>(IQuery subquery)
         => new(subquery, "ALL");
 
     /// <summary>

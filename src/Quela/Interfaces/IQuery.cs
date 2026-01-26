@@ -1,5 +1,3 @@
-using System.Data;
-
 namespace Quela;
 
 /// <summary>
@@ -25,25 +23,6 @@ public interface IQuery
 /// <typeparam name="T">The result type for query execution.</typeparam>
 public interface IQuery<T> : IQuery
 {
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Dapper Execution
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Executes the query and returns all rows.
-    /// </summary>
-    Task<IEnumerable<T>> QueryAsync(IDbConnection connection);
-
-    /// <summary>
-    /// Executes the query and returns the first row or default.
-    /// </summary>
-    Task<T?> FirstOrDefaultAsync(IDbConnection connection);
-
-    /// <summary>
-    /// Executes the query and returns exactly one row.
-    /// </summary>
-    Task<T> SingleAsync(IDbConnection connection);
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Pagination (SQL Server)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -86,4 +65,7 @@ public interface IQuery<T> : IQuery
     /// Combines with another query using EXCEPT.
     /// </summary>
     IOrderBy<T> Except(IQuery<T> other);
+
+    // Note: Dapper execution methods (QueryAsync, FirstOrDefaultAsync, etc.)
+    // are available when Dapper package is added via extension methods.
 }

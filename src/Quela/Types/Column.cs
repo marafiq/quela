@@ -87,7 +87,8 @@ public class Column<T> : IColumn, ISelectable, IGroupable, IOrderable
     {
         if (values.Length == 0)
             return new Condition("1 = 0"); // Always false for empty IN
-        return new Condition($"{FullName} IN @p", values);
+        var placeholders = string.Join(", ", values.Select(_ => "@p"));
+        return new Condition($"{FullName} IN ({placeholders})", values.Cast<object?>().ToArray());
     }
 
     public Condition In(IEnumerable<T> values) => In(values.ToArray());
@@ -96,7 +97,8 @@ public class Column<T> : IColumn, ISelectable, IGroupable, IOrderable
     {
         if (values.Length == 0)
             return new Condition("1 = 1"); // Always true for empty NOT IN
-        return new Condition($"{FullName} NOT IN @p", values);
+        var placeholders = string.Join(", ", values.Select(_ => "@p"));
+        return new Condition($"{FullName} NOT IN ({placeholders})", values.Cast<object?>().ToArray());
     }
 
     public Condition NotIn(IEnumerable<T> values) => NotIn(values.ToArray());

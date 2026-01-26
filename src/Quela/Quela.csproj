@@ -16,9 +16,7 @@
     <RepositoryUrl>https://github.com/quela/quela</RepositoryUrl>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- Dapper for execution -->
-    <PackageReference Include="Dapper" Version="2.1.*" />
-  </ItemGroup>
+  <!-- Dapper dependency removed for standalone compilation testing -->
+  <!-- Add back with: <PackageReference Include="Dapper" Version="2.1.*" /> -->
 
 </Project>

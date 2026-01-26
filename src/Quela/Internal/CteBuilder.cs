@@ -7,14 +7,14 @@ internal class CteBuilder : ICte
 {
     private readonly List<string> _ctes = new();
 
-    public CteBuilder(string name, Func<IFrom<Row>> queryBuilder)
+    public CteBuilder(string name, Func<IQuery> queryBuilder)
     {
         var query = queryBuilder();
         var sql = query.ToSql();
         _ctes.Add($"[{name}] AS ({sql})");
     }
 
-    public CteBuilder(string name, Func<IFrom<Row>> anchor, Func<IFrom<Row>> recursive)
+    public CteBuilder(string name, Func<IQuery> anchor, Func<IQuery> recursive)
     {
         var anchorQuery = anchor();
         var recursiveQuery = recursive();
@@ -23,7 +23,7 @@ internal class CteBuilder : ICte
         _ctes.Add($"[{name}] AS ({anchorSql} UNION ALL {recursiveSql})");
     }
 
-    public ICte With(string name, Func<IFrom<Row>> queryBuilder)
+    public ICte With(string name, Func<IQuery> queryBuilder)
     {
         var query = queryBuilder();
         var sql = query.ToSql();
@@ -31,7 +31,7 @@ internal class CteBuilder : ICte
         return this;
     }
 
-    public ICte WithRecursive(string name, Func<IFrom<Row>> anchor, Func<IFrom<Row>> recursive)
+    public ICte WithRecursive(string name, Func<IQuery> anchor, Func<IQuery> recursive)
     {
         var anchorQuery = anchor();
         var recursiveQuery = recursive();

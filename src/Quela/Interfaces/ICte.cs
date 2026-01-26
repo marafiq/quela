@@ -8,12 +8,12 @@ public interface ICte
     /// <summary>
     /// Adds another CTE.
     /// </summary>
-    ICte With(string name, Func<IFrom<Row>> queryBuilder);
+    ICte With(string name, Func<IQuery> queryBuilder);
 
     /// <summary>
     /// Adds a recursive CTE.
     /// </summary>
-    ICte WithRecursive(string name, Func<IFrom<Row>> anchor, Func<IFrom<Row>> recursive);
+    ICte WithRecursive(string name, Func<IQuery> anchor, Func<IQuery> recursive);
 
     /// <summary>
     /// Starts the main query FROM clause.
