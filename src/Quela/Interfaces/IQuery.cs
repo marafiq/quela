@@ -95,6 +95,60 @@ public interface IQuery<T> : IQuery
     /// </summary>
     IQuery<string> ForXmlRaw(string? elementName = null, string? root = null, bool elements = false);
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPTION Clause (Query Hints)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Adds OPTION clause with query hints.
+    /// </summary>
+    IQuery<T> Option(params QueryHint[] hints);
+
+    /// <summary>
+    /// Adds OPTION (RECOMPILE) hint.
+    /// </summary>
+    IQuery<T> OptionRecompile();
+
+    /// <summary>
+    /// Adds OPTION (MAXDOP n) hint.
+    /// </summary>
+    IQuery<T> OptionMaxDop(int maxDegreeOfParallelism);
+
+    /// <summary>
+    /// Adds OPTION (OPTIMIZE FOR (@param = value)) hint.
+    /// </summary>
+    IQuery<T> OptionOptimizeFor(string parameterName, object value);
+
+    /// <summary>
+    /// Adds OPTION (OPTIMIZE FOR UNKNOWN) hint.
+    /// </summary>
+    IQuery<T> OptionOptimizeForUnknown();
+
+    /// <summary>
+    /// Adds OPTION (FAST n) hint.
+    /// </summary>
+    IQuery<T> OptionFast(int rows);
+
+    /// <summary>
+    /// Adds OPTION (FORCE ORDER) hint.
+    /// </summary>
+    IQuery<T> OptionForceOrder();
+
+    /// <summary>
+    /// Adds OPTION (HASH JOIN) hint.
+    /// </summary>
+    IQuery<T> OptionHashJoin();
+
+    /// <summary>
+    /// Adds OPTION (LOOP JOIN) hint.
+    /// </summary>
+    IQuery<T> OptionLoopJoin();
+
+    /// <summary>
+    /// Adds OPTION (MERGE JOIN) hint.
+    /// </summary>
+    IQuery<T> OptionMergeJoin();
+
     // Note: Dapper execution methods (QueryAsync, FirstOrDefaultAsync, etc.)
     // are available when Dapper package is added via extension methods.
 }

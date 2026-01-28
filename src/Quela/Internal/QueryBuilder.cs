@@ -33,9 +33,12 @@ internal class QueryBuilder<T> :
     private int? _fetch;
     private bool _distinct;
     private int? _top;
+    private bool _topWithTies;
+    private bool _topPercent;
 
     private readonly List<(IQuery Query, string Operation)> _setOperations = new();
     private string? _forClause;
+    private readonly List<string> _optionHints = new();
 
     private readonly Dictionary<string, object?> _params = new();
     private int _paramIndex;
@@ -182,6 +185,18 @@ internal class QueryBuilder<T> :
     public IFrom<T> OuterApply<TAlias>(IQuery subquery, TAlias alias) where TAlias : TypedAlias
     {
         return OuterApply(subquery, alias.AliasName);
+    }
+
+    public IFrom<T> CrossApply(TableValuedFunction tvf, string alias)
+    {
+        _joins.Add($"CROSS APPLY {tvf.ToSql()} AS [{alias}]");
+        return this;
+    }
+
+    public IFrom<T> OuterApply(TableValuedFunction tvf, string alias)
+    {
+        _joins.Add($"OUTER APPLY {tvf.ToSql()} AS [{alias}]");
+        return this;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -448,6 +463,28 @@ internal class QueryBuilder<T> :
         return Select(columns);
     }
 
+    public IQuery<T> SelectTopWithTies(int count, params ISelectable[] columns)
+    {
+        _top = count;
+        _topWithTies = true;
+        return Select(columns);
+    }
+
+    public IQuery<T> SelectTopPercent(int percent, params ISelectable[] columns)
+    {
+        _top = percent;
+        _topPercent = true;
+        return Select(columns);
+    }
+
+    public IQuery<T> SelectTopPercentWithTies(int percent, params ISelectable[] columns)
+    {
+        _top = percent;
+        _topPercent = true;
+        _topWithTies = true;
+        return Select(columns);
+    }
+
     public IQuery<T> SelectAll()
     {
         _select.Add("*");
@@ -563,6 +600,85 @@ internal class QueryBuilder<T> :
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // OPTION Clause (Query Hints)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    public IQuery<T> Option(params QueryHint[] hints)
+    {
+        foreach (var hint in hints)
+        {
+            _optionHints.Add(hint.ToSql());
+        }
+        return this;
+    }
+
+    public IQuery<T> OptionRecompile()
+    {
+        _optionHints.Add("RECOMPILE");
+        return this;
+    }
+
+    public IQuery<T> OptionMaxDop(int maxDegreeOfParallelism)
+    {
+        _optionHints.Add($"MAXDOP {maxDegreeOfParallelism}");
+        return this;
+    }
+
+    public IQuery<T> OptionOptimizeFor(string parameterName, object value)
+    {
+        var formattedValue = value switch
+        {
+            string s => $"N'{s.Replace("'", "''")}'",
+            int i => i.ToString(),
+            long l => l.ToString(),
+            decimal d => d.ToString(),
+            double db => db.ToString(),
+            bool b => b ? "1" : "0",
+            DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss}'",
+            null => "NULL",
+            _ => value.ToString() ?? "NULL"
+        };
+        _optionHints.Add($"OPTIMIZE FOR ({parameterName} = {formattedValue})");
+        return this;
+    }
+
+    public IQuery<T> OptionOptimizeForUnknown()
+    {
+        _optionHints.Add("OPTIMIZE FOR UNKNOWN");
+        return this;
+    }
+
+    public IQuery<T> OptionFast(int rows)
+    {
+        _optionHints.Add($"FAST {rows}");
+        return this;
+    }
+
+    public IQuery<T> OptionForceOrder()
+    {
+        _optionHints.Add("FORCE ORDER");
+        return this;
+    }
+
+    public IQuery<T> OptionHashJoin()
+    {
+        _optionHints.Add("HASH JOIN");
+        return this;
+    }
+
+    public IQuery<T> OptionLoopJoin()
+    {
+        _optionHints.Add("LOOP JOIN");
+        return this;
+    }
+
+    public IQuery<T> OptionMergeJoin()
+    {
+        _optionHints.Add("MERGE JOIN");
+        return this;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // BUILD
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -581,7 +697,13 @@ internal class QueryBuilder<T> :
         // SELECT
         sql.Append("SELECT ");
         if (_distinct) sql.Append("DISTINCT ");
-        if (_top.HasValue) sql.Append($"TOP ({_top}) ");
+        if (_top.HasValue)
+        {
+            sql.Append($"TOP ({_top})");
+            if (_topPercent) sql.Append(" PERCENT");
+            if (_topWithTies) sql.Append(" WITH TIES");
+            sql.Append(' ');
+        }
         sql.Append(_select.Count > 0 ? string.Join(", ", _select) : "*");
 
         // FROM
@@ -653,6 +775,14 @@ internal class QueryBuilder<T> :
             sql.Append(_forClause);
         }
 
+        // OPTION clause (query hints)
+        if (_optionHints.Count > 0)
+        {
+            sql.Append(" OPTION (");
+            sql.Append(string.Join(", ", _optionHints));
+            sql.Append(')');
+        }
+
         return new SqlQuery(sql.ToString(), _params);
     }
 
@@ -721,8 +851,11 @@ internal class QueryBuilder<T> :
         _fetch = other._fetch;
         _distinct = other._distinct;
         _top = other._top;
+        _topWithTies = other._topWithTies;
+        _topPercent = other._topPercent;
         _setOperations = other._setOperations;
         _forClause = other._forClause;
+        _optionHints = other._optionHints;
         _params = other._params;
         _paramIndex = other._paramIndex;
     }
@@ -743,8 +876,11 @@ internal class QueryBuilder<T> :
         _fetch = (int?)t.GetField("_fetch", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other);
         _distinct = (bool)t.GetField("_distinct", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other)!;
         _top = (int?)t.GetField("_top", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other);
+        _topWithTies = (bool)t.GetField("_topWithTies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other)!;
+        _topPercent = (bool)t.GetField("_topPercent", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other)!;
         _setOperations = (List<(IQuery, string)>)t.GetField("_setOperations", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other)!;
         _forClause = (string?)t.GetField("_forClause", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other);
+        _optionHints = (List<string>)t.GetField("_optionHints", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other)!;
         _params = (Dictionary<string, object?>)t.GetField("_params", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other)!;
         _paramIndex = (int)t.GetField("_paramIndex", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other)!;
     }

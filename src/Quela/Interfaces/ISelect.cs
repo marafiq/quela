@@ -28,6 +28,21 @@ public interface ISelect<T>
     IQuery<T> SelectTop(int count, params ISelectable[] columns);
 
     /// <summary>
+    /// Selects TOP N rows WITH TIES (includes ties based on ORDER BY).
+    /// </summary>
+    IQuery<T> SelectTopWithTies(int count, params ISelectable[] columns);
+
+    /// <summary>
+    /// Selects TOP N PERCENT rows.
+    /// </summary>
+    IQuery<T> SelectTopPercent(int percent, params ISelectable[] columns);
+
+    /// <summary>
+    /// Selects TOP N PERCENT rows WITH TIES.
+    /// </summary>
+    IQuery<T> SelectTopPercentWithTies(int percent, params ISelectable[] columns);
+
+    /// <summary>
     /// Selects all columns (*).
     /// </summary>
     IQuery<T> SelectAll();

@@ -10,6 +10,7 @@ public class Table
     public string? Alias { get; private set; }
     internal bool IsCte { get; init; }
     internal string? TableHint { get; private set; }
+    internal string? TemporalClause { get; private set; }
 
     public Table(string name, string? schema = null, bool isCte = false)
     {
@@ -23,7 +24,7 @@ public class Table
     /// </summary>
     public Table As(string alias)
     {
-        return new Table(Name, Schema, IsCte) { Alias = alias, TableHint = TableHint };
+        return new Table(Name, Schema, IsCte) { Alias = alias, TableHint = TableHint, TemporalClause = TemporalClause };
     }
 
     /// <summary>
@@ -31,7 +32,7 @@ public class Table
     /// </summary>
     public Table WithHint(TableHints hint)
     {
-        return new Table(Name, Schema, IsCte) { Alias = Alias, TableHint = hint.ToSql() };
+        return new Table(Name, Schema, IsCte) { Alias = Alias, TableHint = hint.ToSql(), TemporalClause = TemporalClause };
     }
 
     /// <summary>
@@ -40,7 +41,7 @@ public class Table
     public Table WithHints(params TableHints[] hints)
     {
         var hintSql = string.Join(", ", hints.Select(h => h.ToSql()));
-        return new Table(Name, Schema, IsCte) { Alias = Alias, TableHint = hintSql };
+        return new Table(Name, Schema, IsCte) { Alias = Alias, TableHint = hintSql, TemporalClause = TemporalClause };
     }
 
     /// <summary>
@@ -48,7 +49,7 @@ public class Table
     /// </summary>
     public Table WithIndex(string indexName)
     {
-        return new Table(Name, Schema, IsCte) { Alias = Alias, TableHint = $"INDEX({indexName})" };
+        return new Table(Name, Schema, IsCte) { Alias = Alias, TableHint = $"INDEX({indexName})", TemporalClause = TemporalClause };
     }
 
     /// <summary>
@@ -56,7 +57,89 @@ public class Table
     /// </summary>
     public Table WithRawHint(string hint)
     {
-        return new Table(Name, Schema, IsCte) { Alias = Alias, TableHint = hint };
+        return new Table(Name, Schema, IsCte) { Alias = Alias, TableHint = hint, TemporalClause = TemporalClause };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Temporal Table Support (FOR SYSTEM_TIME)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Queries the temporal table AS OF a specific point in time.
+    /// </summary>
+    public Table ForSystemTimeAsOf(DateTime dateTime)
+    {
+        return new Table(Name, Schema, IsCte)
+        {
+            Alias = Alias,
+            TableHint = TableHint,
+            TemporalClause = $"FOR SYSTEM_TIME AS OF '{dateTime:yyyy-MM-dd HH:mm:ss.fffffff}'"
+        };
+    }
+
+    /// <summary>
+    /// Queries the temporal table AS OF a specific point in time using a parameter.
+    /// </summary>
+    public Table ForSystemTimeAsOf(string parameterExpression)
+    {
+        return new Table(Name, Schema, IsCte)
+        {
+            Alias = Alias,
+            TableHint = TableHint,
+            TemporalClause = $"FOR SYSTEM_TIME AS OF {parameterExpression}"
+        };
+    }
+
+    /// <summary>
+    /// Queries all rows that were active FROM start_time TO end_time.
+    /// </summary>
+    public Table ForSystemTimeFromTo(DateTime startTime, DateTime endTime)
+    {
+        return new Table(Name, Schema, IsCte)
+        {
+            Alias = Alias,
+            TableHint = TableHint,
+            TemporalClause = $"FOR SYSTEM_TIME FROM '{startTime:yyyy-MM-dd HH:mm:ss.fffffff}' TO '{endTime:yyyy-MM-dd HH:mm:ss.fffffff}'"
+        };
+    }
+
+    /// <summary>
+    /// Queries all rows that were active BETWEEN start_time AND end_time.
+    /// </summary>
+    public Table ForSystemTimeBetween(DateTime startTime, DateTime endTime)
+    {
+        return new Table(Name, Schema, IsCte)
+        {
+            Alias = Alias,
+            TableHint = TableHint,
+            TemporalClause = $"FOR SYSTEM_TIME BETWEEN '{startTime:yyyy-MM-dd HH:mm:ss.fffffff}' AND '{endTime:yyyy-MM-dd HH:mm:ss.fffffff}'"
+        };
+    }
+
+    /// <summary>
+    /// Queries all rows CONTAINED IN the specified time range.
+    /// </summary>
+    public Table ForSystemTimeContainedIn(DateTime startTime, DateTime endTime)
+    {
+        return new Table(Name, Schema, IsCte)
+        {
+            Alias = Alias,
+            TableHint = TableHint,
+            TemporalClause = $"FOR SYSTEM_TIME CONTAINED IN ('{startTime:yyyy-MM-dd HH:mm:ss.fffffff}', '{endTime:yyyy-MM-dd HH:mm:ss.fffffff}')"
+        };
+    }
+
+    /// <summary>
+    /// Queries all versions of rows (current and historical).
+    /// </summary>
+    public Table ForSystemTimeAll()
+    {
+        return new Table(Name, Schema, IsCte)
+        {
+            Alias = Alias,
+            TableHint = TableHint,
+            TemporalClause = "FOR SYSTEM_TIME ALL"
+        };
     }
 
     /// <summary>
@@ -83,13 +166,32 @@ public class Table
     /// </summary>
     public string ToSql()
     {
-        var baseSql = Alias != null
-            ? $"{QualifiedName} AS [{Alias}]"
-            : QualifiedName;
+        var sb = new System.Text.StringBuilder(QualifiedName);
 
-        return TableHint != null
-            ? $"{baseSql} WITH ({TableHint})"
-            : baseSql;
+        // Add temporal clause (FOR SYSTEM_TIME) immediately after table name
+        if (TemporalClause != null)
+        {
+            sb.Append(' ');
+            sb.Append(TemporalClause);
+        }
+
+        // Add alias
+        if (Alias != null)
+        {
+            sb.Append(" AS [");
+            sb.Append(Alias);
+            sb.Append(']');
+        }
+
+        // Add table hints
+        if (TableHint != null)
+        {
+            sb.Append(" WITH (");
+            sb.Append(TableHint);
+            sb.Append(')');
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>

@@ -98,6 +98,16 @@ public interface IFrom<T> : IWhere<T>
     /// </summary>
     IFrom<T> OuterApply<TAlias>(IQuery subquery, TAlias alias) where TAlias : TypedAlias;
 
+    /// <summary>
+    /// CROSS APPLY with a table-valued function (e.g., OPENJSON, STRING_SPLIT).
+    /// </summary>
+    IFrom<T> CrossApply(TableValuedFunction tvf, string alias);
+
+    /// <summary>
+    /// OUTER APPLY with a table-valued function (e.g., OPENJSON, STRING_SPLIT).
+    /// </summary>
+    IFrom<T> OuterApply(TableValuedFunction tvf, string alias);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // PIVOT / UNPIVOT (SQL Server)
     // ═══════════════════════════════════════════════════════════════════════════

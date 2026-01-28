@@ -2345,6 +2345,335 @@ class Program
         });
 
         // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 32: TOP WITH TIES / TOP PERCENT Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── TOP WITH TIES / TOP PERCENT Tests ──");
+
+        RunTest("SelectTopWithTies_GeneratesWithTiesSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .OrderBy(Products.Price.Desc())
+                .SelectTopWithTies(10, Products.Id, Products.Name, Products.Price);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "SELECT TOP (10) WITH TIES");
+            SqlValidator.AssertContains(sql, "ORDER BY");
+        });
+
+        RunTest("SelectTopPercent_GeneratesPercentSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .SelectTopPercent(25, Products.Id, Products.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "SELECT TOP (25) PERCENT");
+        });
+
+        RunTest("SelectTopPercentWithTies_GeneratesBothModifiers", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .OrderBy(Products.Price.Desc())
+                .SelectTopPercentWithTies(10, Products.Id, Products.Name, Products.Price);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "SELECT TOP (10) PERCENT WITH TIES");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 33: Temporal Table Tests (FOR SYSTEM_TIME)
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Temporal Table Tests ──");
+
+        RunTest("TemporalTable_AsOf_GeneratesForSystemTimeSyntax", () =>
+        {
+            var employeesHistory = new Table("Employees", "dbo")
+                .ForSystemTimeAsOf(new DateTime(2024, 1, 15, 10, 30, 0));
+            var query = Sql.From(employeesHistory).SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FOR SYSTEM_TIME AS OF '2024-01-15 10:30:00");
+        });
+
+        RunTest("TemporalTable_AsOfWithAlias_GeneratesCorrectSyntax", () =>
+        {
+            var employeesHistory = new Table("Employees", "dbo")
+                .ForSystemTimeAsOf(new DateTime(2024, 6, 1))
+                .As("emp");
+            var query = Sql.From(employeesHistory).SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "[dbo].[Employees] FOR SYSTEM_TIME AS OF");
+            SqlValidator.AssertContains(sql, "AS [emp]");
+        });
+
+        RunTest("TemporalTable_FromTo_GeneratesCorrectSyntax", () =>
+        {
+            var audits = new Table("AuditLog", "dbo")
+                .ForSystemTimeFromTo(new DateTime(2024, 1, 1), new DateTime(2024, 12, 31));
+            var query = Sql.From(audits).SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FOR SYSTEM_TIME FROM '2024-01-01");
+            SqlValidator.AssertContains(sql, "TO '2024-12-31");
+        });
+
+        RunTest("TemporalTable_Between_GeneratesCorrectSyntax", () =>
+        {
+            var changes = new Table("Changes", "dbo")
+                .ForSystemTimeBetween(new DateTime(2024, 1, 1), new DateTime(2024, 6, 30));
+            var query = Sql.From(changes).SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FOR SYSTEM_TIME BETWEEN '2024-01-01");
+            SqlValidator.AssertContains(sql, "AND '2024-06-30");
+        });
+
+        RunTest("TemporalTable_ContainedIn_GeneratesCorrectSyntax", () =>
+        {
+            var logs = new Table("Logs", "dbo")
+                .ForSystemTimeContainedIn(new DateTime(2024, 3, 1), new DateTime(2024, 3, 31));
+            var query = Sql.From(logs).SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FOR SYSTEM_TIME CONTAINED IN ('2024-03-01");
+        });
+
+        RunTest("TemporalTable_All_GeneratesCorrectSyntax", () =>
+        {
+            var allVersions = new Table("Products", "dbo").ForSystemTimeAll();
+            var query = Sql.From(allVersions).SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FOR SYSTEM_TIME ALL");
+        });
+
+        RunTest("TemporalTable_WithHint_PreservesBoth", () =>
+        {
+            var table = new Table("Data", "dbo")
+                .ForSystemTimeAsOf(new DateTime(2024, 1, 1))
+                .WithHint(TableHints.NoLock);
+            var query = Sql.From(table).SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FOR SYSTEM_TIME AS OF");
+            SqlValidator.AssertContains(sql, "WITH (NOLOCK)");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 34: OPTION Clause (Query Hints) Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── OPTION Clause Tests ──");
+
+        RunTest("Option_Recompile_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Products.Name)
+                .OptionRecompile();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPTION (RECOMPILE)");
+        });
+
+        RunTest("Option_MaxDop_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id)
+                .OptionMaxDop(4);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPTION (MAXDOP 4)");
+        });
+
+        RunTest("Option_Fast_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id)
+                .OptionFast(100);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPTION (FAST 100)");
+        });
+
+        RunTest("Option_ForceOrder_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Join(CategoriesTable).On(Products.CategoryId == Categories.Id)
+                .Select(Products.Name, Categories.Name)
+                .OptionForceOrder();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPTION (FORCE ORDER)");
+        });
+
+        RunTest("Option_HashJoin_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Join(CategoriesTable).On(Products.CategoryId == Categories.Id)
+                .Select(Products.Name)
+                .OptionHashJoin();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPTION (HASH JOIN)");
+        });
+
+        RunTest("Option_LoopJoin_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Name)
+                .OptionLoopJoin();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPTION (LOOP JOIN)");
+        });
+
+        RunTest("Option_MergeJoin_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Name)
+                .OptionMergeJoin();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPTION (MERGE JOIN)");
+        });
+
+        RunTest("Option_OptimizeForUnknown_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Where(Products.Name == "test")
+                .Select(Products.Id)
+                .OptionOptimizeForUnknown();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPTION (OPTIMIZE FOR UNKNOWN)");
+        });
+
+        RunTest("Option_OptimizeFor_WithValue_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Where(Products.CategoryId == 1)
+                .Select(Products.Id)
+                .OptionOptimizeFor("@p0", 5);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPTION (OPTIMIZE FOR (@p0 = 5))");
+        });
+
+        RunTest("Option_Multiple_GeneratesCommasSeparated", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id)
+                .OptionRecompile()
+                .OptionMaxDop(2);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPTION (RECOMPILE, MAXDOP 2)");
+        });
+
+        RunTest("Option_QueryHintClass_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id)
+                .Option(QueryHint.Recompile, QueryHint.MaxDop(8));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPTION (RECOMPILE, MAXDOP 8)");
+        });
+
+        RunTest("Option_QueryHint_MaxRecursion_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id)
+                .Option(QueryHint.MaxRecursion(100));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPTION (MAXRECURSION 100)");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 35: Table-Valued Functions (OPENJSON, STRING_SPLIT)
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Table-Valued Functions Tests ──");
+
+        RunTest("OpenJson_Basic_GeneratesCorrectSyntax", () =>
+        {
+            var jsonCol = new Column<string>("Data", "JsonValue");
+            var query = Sql.From(new Table("Data", "dbo"))
+                .CrossApply(TableValuedFunction.OpenJson(jsonCol), "j")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "CROSS APPLY OPENJSON([Data].[JsonValue]) AS [j]");
+        });
+
+        RunTest("OpenJson_WithPath_GeneratesCorrectSyntax", () =>
+        {
+            var jsonCol = new Column<string>("Orders", "Details");
+            var query = Sql.From(new Table("Orders", "dbo"))
+                .CrossApply(TableValuedFunction.OpenJson(jsonCol, "$.items"), "items")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPENJSON([Orders].[Details], N'$.items')");
+        });
+
+        RunTest("OpenJson_WithSchema_GeneratesCorrectSyntax", () =>
+        {
+            var jsonCol = new Column<string>("Data", "Json");
+            var tvf = TableValuedFunction.OpenJsonWith(jsonCol)
+                .Column("id", "INT", "$.id")
+                .Column("name", "NVARCHAR(100)", "$.name")
+                .Column("price", "DECIMAL(10,2)", "$.price")
+                .Build();
+            var query = Sql.From(new Table("Data", "dbo"))
+                .CrossApply(tvf, "parsed")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OPENJSON([Data].[Json]) WITH (");
+            SqlValidator.AssertContains(sql, "[id] INT '$.id'");
+            SqlValidator.AssertContains(sql, "[name] NVARCHAR(100) '$.name'");
+            SqlValidator.AssertContains(sql, "[price] DECIMAL(10,2) '$.price'");
+        });
+
+        RunTest("OpenJson_WithAsJson_GeneratesCorrectSyntax", () =>
+        {
+            var jsonCol = new Column<string>("Data", "Json");
+            var tvf = TableValuedFunction.OpenJsonWith(jsonCol)
+                .Column("id", "INT", "$.id")
+                .ColumnAsJson("children", "$.children")
+                .Build();
+            var query = Sql.From(new Table("Data", "dbo"))
+                .OuterApply(tvf, "parsed")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OUTER APPLY OPENJSON");
+            SqlValidator.AssertContains(sql, "[children] NVARCHAR(MAX) '$.children' AS JSON");
+        });
+
+        RunTest("StringSplit_Basic_GeneratesCorrectSyntax", () =>
+        {
+            var tagsCol = new Column<string>("Articles", "Tags");
+            var query = Sql.From(new Table("Articles", "dbo"))
+                .CrossApply(TableValuedFunction.StringSplit(tagsCol, ","), "t")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "CROSS APPLY STRING_SPLIT([Articles].[Tags], N',') AS [t]");
+        });
+
+        RunTest("StringSplit_WithOrdinal_GeneratesCorrectSyntax", () =>
+        {
+            var pathCol = new Column<string>("Files", "Path");
+            var query = Sql.From(new Table("Files", "dbo"))
+                .CrossApply(TableValuedFunction.StringSplitWithOrdinal(pathCol, "/"), "parts")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "STRING_SPLIT([Files].[Path], N'/', 1)");
+        });
+
+        RunTest("GenerateSeries_Basic_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(new Table("Data", "dbo"))
+                .CrossApply(TableValuedFunction.GenerateSeries(1, 100), "n")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "CROSS APPLY GENERATE_SERIES(1, 100) AS [n]");
+        });
+
+        RunTest("GenerateSeries_WithStep_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(new Table("Data", "dbo"))
+                .CrossApply(TableValuedFunction.GenerateSeries(0, 1000, 10), "decades")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "GENERATE_SERIES(0, 1000, 10)");
+        });
+
+        RunTest("OuterApply_TableValuedFunction_GeneratesCorrectSyntax", () =>
+        {
+            var jsonCol = new Column<string>("Data", "JsonArray");
+            var query = Sql.From(new Table("Data", "dbo"))
+                .OuterApply(TableValuedFunction.OpenJson(jsonCol), "items")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "OUTER APPLY OPENJSON([Data].[JsonArray]) AS [items]");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
         // Print Summary
         // ═══════════════════════════════════════════════════════════════════════════
         Console.WriteLine();
