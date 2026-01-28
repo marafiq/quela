@@ -97,4 +97,45 @@ public interface IFrom<T> : IWhere<T>
     /// OUTER APPLY with typed alias.
     /// </summary>
     IFrom<T> OuterApply<TAlias>(IQuery subquery, TAlias alias) where TAlias : TypedAlias;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PIVOT / UNPIVOT (SQL Server)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Applies a PIVOT operation to transform row values into columns.
+    /// </summary>
+    /// <param name="aggregate">The aggregate function (e.g., Fn.Sum(column)).</param>
+    /// <param name="forColumn">The column whose values become column headers.</param>
+    /// <param name="inValues">The values to pivot into columns.</param>
+    /// <param name="alias">The alias for the pivoted result.</param>
+    IFrom<T> Pivot(ISelectable aggregate, IColumn forColumn, object[] inValues, string alias);
+
+    /// <summary>
+    /// Applies a PIVOT operation using string column names.
+    /// </summary>
+    /// <param name="aggregateFunction">The aggregate function name (e.g., "SUM").</param>
+    /// <param name="valueColumn">The column to aggregate.</param>
+    /// <param name="forColumn">The column whose values become column headers.</param>
+    /// <param name="inValues">The values to pivot into columns.</param>
+    /// <param name="alias">The alias for the pivoted result.</param>
+    IFrom<T> Pivot(string aggregateFunction, string valueColumn, string forColumn, object[] inValues, string alias);
+
+    /// <summary>
+    /// Applies an UNPIVOT operation to transform columns into row values.
+    /// </summary>
+    /// <param name="valueColumn">The name for the new value column.</param>
+    /// <param name="nameColumn">The name for the new column that will contain the original column names.</param>
+    /// <param name="sourceColumns">The columns to unpivot.</param>
+    /// <param name="alias">The alias for the unpivoted result.</param>
+    IFrom<T> Unpivot(string valueColumn, string nameColumn, string[] sourceColumns, string alias);
+
+    /// <summary>
+    /// Applies an UNPIVOT operation using column references.
+    /// </summary>
+    /// <param name="valueColumn">The name for the new value column.</param>
+    /// <param name="nameColumn">The name for the new column that will contain the original column names.</param>
+    /// <param name="sourceColumns">The columns to unpivot.</param>
+    /// <param name="alias">The alias for the unpivoted result.</param>
+    IFrom<T> Unpivot(string valueColumn, string nameColumn, IColumn[] sourceColumns, string alias);
 }

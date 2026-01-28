@@ -2260,6 +2260,91 @@ class Program
         });
 
         // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 31: PIVOT / UNPIVOT Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── PIVOT / UNPIVOT Tests ──");
+
+        RunTest("Pivot_WithAggregateAndColumnRef_GeneratesValidSyntax", () =>
+        {
+            // Simulate a PIVOT query: transform rows to columns
+            var salesTable = new Table("Sales", "dbo").As("src");
+            var amount = new Column<decimal>("src", "Amount");
+            var year = new Column<int>("src", "Year");
+
+            // In real usage: FROM [Sales] AS [src] PIVOT (SUM(Amount) FOR Year IN ([2019], [2020], [2021])) AS pvt
+            var query = Sql.From(salesTable)
+                .Pivot(Fn.Sum(amount), year, new object[] { 2019, 2020, 2021 }, "pvt")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "PIVOT");
+            SqlValidator.AssertContains(sql, "SUM([src].[Amount])");
+            SqlValidator.AssertContains(sql, "FOR [src].[Year]");
+            SqlValidator.AssertContains(sql, "[2019]", "[2020]", "[2021]");
+            SqlValidator.AssertContains(sql, "AS [pvt]");
+        });
+
+        RunTest("Pivot_WithStringOverload_GeneratesValidSyntax", () =>
+        {
+            var salesTable = new Table("Sales", "dbo").As("src");
+
+            var query = Sql.From(salesTable)
+                .Pivot("SUM", "Amount", "Year", new object[] { "Q1", "Q2", "Q3", "Q4" }, "pvt")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "PIVOT (SUM([Amount]) FOR [Year]");
+            SqlValidator.AssertContains(sql, "[Q1]", "[Q2]", "[Q3]", "[Q4]");
+        });
+
+        RunTest("Unpivot_WithStringColumns_GeneratesValidSyntax", () =>
+        {
+            var salesTable = new Table("SalesByQuarter", "dbo");
+
+            // UNPIVOT transforms columns Q1, Q2, Q3, Q4 into rows
+            var query = Sql.From(salesTable)
+                .Unpivot("Amount", "Quarter", new[] { "Q1", "Q2", "Q3", "Q4" }, "unpvt")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "UNPIVOT");
+            SqlValidator.AssertContains(sql, "[Amount] FOR [Quarter]");
+            SqlValidator.AssertContains(sql, "[Q1]", "[Q2]", "[Q3]", "[Q4]");
+            SqlValidator.AssertContains(sql, "AS [unpvt]");
+        });
+
+        RunTest("Unpivot_WithColumnReferences_GeneratesValidSyntax", () =>
+        {
+            var table = new Table("Metrics", "dbo");
+            var q1Col = new Column<decimal>("Metrics", "Q1");
+            var q2Col = new Column<decimal>("Metrics", "Q2");
+
+            var query = Sql.From(table)
+                .Unpivot("Value", "Period", new IColumn[] { q1Col, q2Col }, "unpvt")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "UNPIVOT");
+            SqlValidator.AssertContains(sql, "[Value] FOR [Period]");
+            SqlValidator.AssertContains(sql, "[Metrics].[Q1]", "[Metrics].[Q2]");
+        });
+
+        RunTest("Pivot_FromSubquery_GeneratesCompleteQuery", () =>
+        {
+            // A common pattern: subquery -> PIVOT
+            var innerQuery = Sql.From(ProductsTable)
+                .Where(Products.Price > 0)
+                .Select(Products.CategoryId, Products.Name, Products.Price);
+
+            var amount = new Column<decimal>("src", "Price");
+            var category = new Column<int>("src", "CategoryId");
+
+            var query = Sql.From(innerQuery, "src")
+                .Pivot(Fn.Sum(amount), category, new object[] { 1, 2, 3 }, "pvt")
+                .SelectAll();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FROM (SELECT");
+            SqlValidator.AssertContains(sql, "AS [src]");
+            SqlValidator.AssertContains(sql, "PIVOT (SUM([src].[Price])");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
         // Print Summary
         // ═══════════════════════════════════════════════════════════════════════════
         Console.WriteLine();

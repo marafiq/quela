@@ -185,6 +185,53 @@ internal class QueryBuilder<T> :
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // PIVOT / UNPIVOT
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    public IFrom<T> Pivot(ISelectable aggregate, IColumn forColumn, object[] inValues, string alias)
+    {
+        var inList = string.Join(", ", inValues.Select(FormatPivotValue));
+        var pivotSql = $"PIVOT ({aggregate.ToSql()} FOR {((ISelectable)forColumn).ToSql()} IN ({inList})) AS [{alias}]";
+        _joins.Add(pivotSql);
+        return this;
+    }
+
+    public IFrom<T> Pivot(string aggregateFunction, string valueColumn, string forColumn, object[] inValues, string alias)
+    {
+        var inList = string.Join(", ", inValues.Select(FormatPivotValue));
+        var pivotSql = $"PIVOT ({aggregateFunction}([{valueColumn}]) FOR [{forColumn}] IN ({inList})) AS [{alias}]";
+        _joins.Add(pivotSql);
+        return this;
+    }
+
+    public IFrom<T> Unpivot(string valueColumn, string nameColumn, string[] sourceColumns, string alias)
+    {
+        var colList = string.Join(", ", sourceColumns.Select(c => $"[{c}]"));
+        var unpivotSql = $"UNPIVOT ([{valueColumn}] FOR [{nameColumn}] IN ({colList})) AS [{alias}]";
+        _joins.Add(unpivotSql);
+        return this;
+    }
+
+    public IFrom<T> Unpivot(string valueColumn, string nameColumn, IColumn[] sourceColumns, string alias)
+    {
+        var colList = string.Join(", ", sourceColumns.Select(c => ((ISelectable)c).ToSql()));
+        var unpivotSql = $"UNPIVOT ([{valueColumn}] FOR [{nameColumn}] IN ({colList})) AS [{alias}]";
+        _joins.Add(unpivotSql);
+        return this;
+    }
+
+    private static string FormatPivotValue(object value)
+    {
+        // PIVOT IN values must be column identifiers, typically in square brackets
+        return value switch
+        {
+            string s => $"[{s}]",
+            int i => $"[{i}]",
+            _ => $"[{value}]"
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // WHERE
     // ═══════════════════════════════════════════════════════════════════════════
 
