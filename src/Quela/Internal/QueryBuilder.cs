@@ -35,6 +35,7 @@ internal class QueryBuilder<T> :
     private int? _top;
 
     private readonly List<(IQuery Query, string Operation)> _setOperations = new();
+    private string? _forClause;
 
     private readonly Dictionary<string, object?> _params = new();
     private int _paramIndex;
@@ -283,6 +284,28 @@ internal class QueryBuilder<T> :
         return this;
     }
 
+    public IHaving<T> GroupByRollup(params IGroupable[] columns)
+    {
+        var cols = string.Join(", ", columns.Select(c => c.ToSql()));
+        _groupBy.Add($"ROLLUP({cols})");
+        return this;
+    }
+
+    public IHaving<T> GroupByCube(params IGroupable[] columns)
+    {
+        var cols = string.Join(", ", columns.Select(c => c.ToSql()));
+        _groupBy.Add($"CUBE({cols})");
+        return this;
+    }
+
+    public IHaving<T> GroupBySets(params IGroupable[][] sets)
+    {
+        var setsSql = string.Join(", ",
+            sets.Select(set => $"({string.Join(", ", set.Select(c => c.ToSql()))})"));
+        _groupBy.Add($"GROUPING SETS ({setsSql})");
+        return this;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // HAVING
     // ═══════════════════════════════════════════════════════════════════════════
@@ -437,6 +460,62 @@ internal class QueryBuilder<T> :
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // FOR JSON / FOR XML
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    public IQuery<string> ForJsonAuto(bool includeNullValues = false, string? root = null)
+    {
+        var options = new List<string>();
+        if (includeNullValues) options.Add("INCLUDE_NULL_VALUES");
+        if (root != null) options.Add($"ROOT('{root}')");
+
+        _forClause = "FOR JSON AUTO" + (options.Count > 0 ? ", " + string.Join(", ", options) : "");
+        return new QueryBuilder<string>(this);
+    }
+
+    public IQuery<string> ForJsonPath(bool includeNullValues = false, string? root = null, bool withoutArrayWrapper = false)
+    {
+        var options = new List<string>();
+        if (includeNullValues) options.Add("INCLUDE_NULL_VALUES");
+        if (root != null) options.Add($"ROOT('{root}')");
+        if (withoutArrayWrapper) options.Add("WITHOUT_ARRAY_WRAPPER");
+
+        _forClause = "FOR JSON PATH" + (options.Count > 0 ? ", " + string.Join(", ", options) : "");
+        return new QueryBuilder<string>(this);
+    }
+
+    public IQuery<string> ForXmlAuto(bool elements = false, string? root = null)
+    {
+        var options = new List<string>();
+        if (elements) options.Add("ELEMENTS");
+        if (root != null) options.Add($"ROOT('{root}')");
+
+        _forClause = "FOR XML AUTO" + (options.Count > 0 ? ", " + string.Join(", ", options) : "");
+        return new QueryBuilder<string>(this);
+    }
+
+    public IQuery<string> ForXmlPath(string? elementName = null, string? root = null)
+    {
+        var pathArg = elementName != null ? $"('{elementName}')" : "";
+        var options = new List<string>();
+        if (root != null) options.Add($"ROOT('{root}')");
+
+        _forClause = $"FOR XML PATH{pathArg}" + (options.Count > 0 ? ", " + string.Join(", ", options) : "");
+        return new QueryBuilder<string>(this);
+    }
+
+    public IQuery<string> ForXmlRaw(string? elementName = null, string? root = null, bool elements = false)
+    {
+        var rawArg = elementName != null ? $"('{elementName}')" : "";
+        var options = new List<string>();
+        if (elements) options.Add("ELEMENTS");
+        if (root != null) options.Add($"ROOT('{root}')");
+
+        _forClause = $"FOR XML RAW{rawArg}" + (options.Count > 0 ? ", " + string.Join(", ", options) : "");
+        return new QueryBuilder<string>(this);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // BUILD
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -520,6 +599,13 @@ internal class QueryBuilder<T> :
                 sql.Append($" FETCH NEXT {_fetch} ROWS ONLY");
         }
 
+        // FOR JSON / FOR XML
+        if (_forClause != null)
+        {
+            sql.Append(' ');
+            sql.Append(_forClause);
+        }
+
         return new SqlQuery(sql.ToString(), _params);
     }
 
@@ -589,6 +675,7 @@ internal class QueryBuilder<T> :
         _distinct = other._distinct;
         _top = other._top;
         _setOperations = other._setOperations;
+        _forClause = other._forClause;
         _params = other._params;
         _paramIndex = other._paramIndex;
     }
@@ -610,6 +697,7 @@ internal class QueryBuilder<T> :
         _distinct = (bool)t.GetField("_distinct", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other)!;
         _top = (int?)t.GetField("_top", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other);
         _setOperations = (List<(IQuery, string)>)t.GetField("_setOperations", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other)!;
+        _forClause = (string?)t.GetField("_forClause", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other);
         _params = (Dictionary<string, object?>)t.GetField("_params", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other)!;
         _paramIndex = (int)t.GetField("_paramIndex", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(other)!;
     }

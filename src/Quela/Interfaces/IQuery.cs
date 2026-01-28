@@ -66,6 +66,35 @@ public interface IQuery<T> : IQuery
     /// </summary>
     IOrderBy<T> Except(IQuery<T> other);
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FOR JSON / FOR XML Output
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Adds FOR JSON AUTO clause for automatic JSON output.
+    /// </summary>
+    IQuery<string> ForJsonAuto(bool includeNullValues = false, string? root = null);
+
+    /// <summary>
+    /// Adds FOR JSON PATH clause for JSON output with explicit path mapping.
+    /// </summary>
+    IQuery<string> ForJsonPath(bool includeNullValues = false, string? root = null, bool withoutArrayWrapper = false);
+
+    /// <summary>
+    /// Adds FOR XML AUTO clause for automatic XML output.
+    /// </summary>
+    IQuery<string> ForXmlAuto(bool elements = false, string? root = null);
+
+    /// <summary>
+    /// Adds FOR XML PATH clause for XML output with explicit path mapping.
+    /// </summary>
+    IQuery<string> ForXmlPath(string? elementName = null, string? root = null);
+
+    /// <summary>
+    /// Adds FOR XML RAW clause for simple XML output.
+    /// </summary>
+    IQuery<string> ForXmlRaw(string? elementName = null, string? root = null, bool elements = false);
+
     // Note: Dapper execution methods (QueryAsync, FirstOrDefaultAsync, etc.)
     // are available when Dapper package is added via extension methods.
 }

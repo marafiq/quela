@@ -58,6 +58,13 @@ public static class Fn
     /// <summary>APPROX_COUNT_DISTINCT(column) - SQL Server 2019+</summary>
     public static Aggregate<long> ApproxCountDistinct<T>(Column<T> col) => new($"APPROX_COUNT_DISTINCT({col.FullName})");
 
+    /// <summary>GROUPING(column) - Returns 1 if the row is a subtotal row for the specified column.</summary>
+    public static Expression<int> Grouping<T>(Column<T> col) => new($"GROUPING({col.FullName})");
+
+    /// <summary>GROUPING_ID(columns...) - Returns a bitmap of which columns are subtotals.</summary>
+    public static Expression<int> GroupingId(params IGroupable[] columns)
+        => new($"GROUPING_ID({string.Join(", ", columns.Select(c => c.ToSql()))})");
+
     // ═══════════════════════════════════════════════════════════════════════════
     // NULL Functions
     // ═══════════════════════════════════════════════════════════════════════════
@@ -159,6 +166,46 @@ public static class Fn
         => culture != null
             ? new($"FORMAT({col.FullName}, N'{format}', N'{culture}')")
             : new($"FORMAT({col.FullName}, N'{format}')");
+
+    /// <summary>SOUNDEX(string) - Returns a phonetic representation of a string.</summary>
+    public static Expression<string> Soundex(Column<string> col)
+        => new($"SOUNDEX({col.FullName})");
+
+    /// <summary>DIFFERENCE(string1, string2) - Returns the SOUNDEX difference between two strings (0-4).</summary>
+    public static Expression<int> Difference(Column<string> col1, Column<string> col2)
+        => new($"DIFFERENCE({col1.FullName}, {col2.FullName})");
+
+    /// <summary>ASCII(string) - Returns the ASCII code of the first character.</summary>
+    public static Expression<int> Ascii(Column<string> col)
+        => new($"ASCII({col.FullName})");
+
+    /// <summary>UNICODE(string) - Returns the Unicode code of the first character.</summary>
+    public static Expression<int> Unicode(Column<string> col)
+        => new($"UNICODE({col.FullName})");
+
+    /// <summary>CHAR(code) - Returns the character for the given ASCII code.</summary>
+    public static Expression<string> Char(int code)
+        => new($"CHAR({code})");
+
+    /// <summary>NCHAR(code) - Returns the Unicode character for the given code.</summary>
+    public static Expression<string> NChar(int code)
+        => new($"NCHAR({code})");
+
+    /// <summary>TRANSLATE(string, from, to) - Replaces characters in a string (SQL Server 2017+).</summary>
+    public static Expression<string> Translate(Column<string> col, string fromChars, string toChars)
+        => new($"TRANSLATE({col.FullName}, N'{fromChars}', N'{toChars}')");
+
+    /// <summary>QUOTENAME(string) - Returns a string with delimiters for valid SQL Server identifier.</summary>
+    public static Expression<string> QuoteName(Column<string> col)
+        => new($"QUOTENAME({col.FullName})");
+
+    /// <summary>QUOTENAME(string, delimiter) - Returns a string with specified delimiters.</summary>
+    public static Expression<string> QuoteName(Column<string> col, string delimiter)
+        => new($"QUOTENAME({col.FullName}, N'{delimiter}')");
+
+    /// <summary>STRING_ESCAPE(string, type) - Escapes special characters (SQL Server 2016+).</summary>
+    public static Expression<string> StringEscape(Column<string> col, string escapeType = "json")
+        => new($"STRING_ESCAPE({col.FullName}, '{escapeType}')");
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Date/Time Functions
@@ -285,6 +332,50 @@ public static class Fn
     public static Expression<double> Rand(int seed) => new($"RAND({seed})");
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Trigonometric Functions
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>SIN(value) - Returns the sine of the specified angle in radians.</summary>
+    public static Expression<double> Sin<T>(Column<T> col) where T : struct
+        => new($"SIN({col.FullName})");
+
+    /// <summary>COS(value) - Returns the cosine of the specified angle in radians.</summary>
+    public static Expression<double> Cos<T>(Column<T> col) where T : struct
+        => new($"COS({col.FullName})");
+
+    /// <summary>TAN(value) - Returns the tangent of the specified angle in radians.</summary>
+    public static Expression<double> Tan<T>(Column<T> col) where T : struct
+        => new($"TAN({col.FullName})");
+
+    /// <summary>COT(value) - Returns the cotangent of the specified angle in radians.</summary>
+    public static Expression<double> Cot<T>(Column<T> col) where T : struct
+        => new($"COT({col.FullName})");
+
+    /// <summary>ASIN(value) - Returns the arc sine (inverse sine) in radians.</summary>
+    public static Expression<double> Asin<T>(Column<T> col) where T : struct
+        => new($"ASIN({col.FullName})");
+
+    /// <summary>ACOS(value) - Returns the arc cosine (inverse cosine) in radians.</summary>
+    public static Expression<double> Acos<T>(Column<T> col) where T : struct
+        => new($"ACOS({col.FullName})");
+
+    /// <summary>ATAN(value) - Returns the arc tangent (inverse tangent) in radians.</summary>
+    public static Expression<double> Atan<T>(Column<T> col) where T : struct
+        => new($"ATAN({col.FullName})");
+
+    /// <summary>ATN2(y, x) - Returns the arc tangent of y/x in radians.</summary>
+    public static Expression<double> Atn2<T>(Column<T> y, Column<T> x) where T : struct
+        => new($"ATN2({y.FullName}, {x.FullName})");
+
+    /// <summary>RADIANS(value) - Converts degrees to radians.</summary>
+    public static Expression<double> Radians<T>(Column<T> col) where T : struct
+        => new($"RADIANS({col.FullName})");
+
+    /// <summary>DEGREES(value) - Converts radians to degrees.</summary>
+    public static Expression<double> Degrees<T>(Column<T> col) where T : struct
+        => new($"DEGREES({col.FullName})");
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Logical Functions
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -344,6 +435,130 @@ public static class Fn
 
     /// <summary>SCOPE_IDENTITY()</summary>
     public static Expression<decimal> ScopeIdentity() => new("SCOPE_IDENTITY()");
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Type Conversion Functions
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>CAST(expression AS type)</summary>
+    public static Expression<TResult> Cast<TSource, TResult>(Column<TSource> col, string sqlType)
+        => new($"CAST({col.FullName} AS {sqlType})");
+
+    /// <summary>TRY_CAST(expression AS type) - Returns NULL if conversion fails (SQL Server 2012+)</summary>
+    public static Expression<TResult?> TryCast<TSource, TResult>(Column<TSource> col, string sqlType) where TResult : struct
+        => new($"TRY_CAST({col.FullName} AS {sqlType})");
+
+    /// <summary>CONVERT(type, expression)</summary>
+    public static Expression<TResult> Convert<TSource, TResult>(string sqlType, Column<TSource> col)
+        => new($"CONVERT({sqlType}, {col.FullName})");
+
+    /// <summary>CONVERT(type, expression, style)</summary>
+    public static Expression<TResult> Convert<TSource, TResult>(string sqlType, Column<TSource> col, int style)
+        => new($"CONVERT({sqlType}, {col.FullName}, {style})");
+
+    /// <summary>TRY_CONVERT(type, expression) - Returns NULL if conversion fails (SQL Server 2012+)</summary>
+    public static Expression<TResult?> TryConvert<TSource, TResult>(string sqlType, Column<TSource> col) where TResult : struct
+        => new($"TRY_CONVERT({sqlType}, {col.FullName})");
+
+    /// <summary>TRY_CONVERT(type, expression, style) - Returns NULL if conversion fails (SQL Server 2012+)</summary>
+    public static Expression<TResult?> TryConvert<TSource, TResult>(string sqlType, Column<TSource> col, int style) where TResult : struct
+        => new($"TRY_CONVERT({sqlType}, {col.FullName}, {style})");
+
+    /// <summary>PARSE(string AS type USING culture) - Parses string to type (SQL Server 2012+)</summary>
+    public static Expression<TResult> Parse<TResult>(Column<string> col, string sqlType, string? culture = null)
+        => culture != null
+            ? new($"PARSE({col.FullName} AS {sqlType} USING N'{culture}')")
+            : new($"PARSE({col.FullName} AS {sqlType})");
+
+    /// <summary>TRY_PARSE(string AS type USING culture) - Returns NULL if parse fails (SQL Server 2012+)</summary>
+    public static Expression<TResult?> TryParse<TResult>(Column<string> col, string sqlType, string? culture = null) where TResult : struct
+        => culture != null
+            ? new($"TRY_PARSE({col.FullName} AS {sqlType} USING N'{culture}')")
+            : new($"TRY_PARSE({col.FullName} AS {sqlType})");
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Advanced JSON Functions (SQL Server 2016/2017+)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>JSON_MODIFY(json, path, newValue) - Modifies a JSON value (SQL Server 2016+)</summary>
+    public static Expression<string> JsonModify(Column<string> col, string path, string newValue)
+        => new($"JSON_MODIFY({col.FullName}, N'{path}', N'{newValue}')");
+
+    /// <summary>JSON_MODIFY(json, path, column) - Modifies a JSON value with column value (SQL Server 2016+)</summary>
+    public static Expression<string> JsonModify<T>(Column<string> col, string path, Column<T> newValueCol)
+        => new($"JSON_MODIFY({col.FullName}, N'{path}', {newValueCol.FullName})");
+
+    /// <summary>JSON_PATH_EXISTS(json, path) - Checks if JSON path exists (SQL Server 2017+)</summary>
+    public static Expression<int> JsonPathExists(Column<string> col, string path)
+        => new($"JSON_PATH_EXISTS({col.FullName}, N'{path}')");
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Full-Text Search Functions
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Creates a CONTAINS predicate for full-text search.</summary>
+    public static Condition Contains(Column<string> col, string searchTerm)
+        => new($"CONTAINS({col.FullName}, N'{searchTerm.Replace("'", "''")}')");
+
+    /// <summary>Creates a CONTAINS predicate with multiple columns.</summary>
+    public static Condition Contains(IEnumerable<Column<string>> columns, string searchTerm)
+        => new($"CONTAINS(({string.Join(", ", columns.Select(c => c.FullName))}), N'{searchTerm.Replace("'", "''")}')");
+
+    /// <summary>Creates a CONTAINS predicate for all full-text indexed columns.</summary>
+    public static Condition ContainsAll(string searchTerm)
+        => new($"CONTAINS(*, N'{searchTerm.Replace("'", "''")}')");
+
+    /// <summary>Creates a FREETEXT predicate for full-text search.</summary>
+    public static Condition Freetext(Column<string> col, string searchTerm)
+        => new($"FREETEXT({col.FullName}, N'{searchTerm.Replace("'", "''")}')");
+
+    /// <summary>Creates a FREETEXT predicate with multiple columns.</summary>
+    public static Condition Freetext(IEnumerable<Column<string>> columns, string searchTerm)
+        => new($"FREETEXT(({string.Join(", ", columns.Select(c => c.FullName))}), N'{searchTerm.Replace("'", "''")}')");
+
+    /// <summary>Creates a FREETEXT predicate for all full-text indexed columns.</summary>
+    public static Condition FreetextAll(string searchTerm)
+        => new($"FREETEXT(*, N'{searchTerm.Replace("'", "''")}')");
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Cryptographic Functions
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>HASHBYTES(algorithm, data) - Returns hash of input data.</summary>
+    public static Expression<byte[]> HashBytes(string algorithm, Column<string> col)
+        => new($"HASHBYTES('{algorithm}', {col.FullName})");
+
+    /// <summary>HASHBYTES(algorithm, data) with common hash types.</summary>
+    public static Expression<byte[]> HashBytes(HashAlgorithm algorithm, Column<string> col)
+        => new($"HASHBYTES('{algorithm.ToSql()}', {col.FullName})");
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Bitwise Functions
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Bitwise AND operation.</summary>
+    public static Expression<int> BitwiseAnd<T>(Column<T> col, int value) where T : struct
+        => new($"({col.FullName} & {value})");
+
+    /// <summary>Bitwise OR operation.</summary>
+    public static Expression<int> BitwiseOr<T>(Column<T> col, int value) where T : struct
+        => new($"({col.FullName} | {value})");
+
+    /// <summary>Bitwise XOR operation.</summary>
+    public static Expression<int> BitwiseXor<T>(Column<T> col, int value) where T : struct
+        => new($"({col.FullName} ^ {value})");
+
+    /// <summary>Bitwise NOT operation.</summary>
+    public static Expression<int> BitwiseNot<T>(Column<T> col) where T : struct
+        => new($"(~{col.FullName})");
+
+    /// <summary>Left shift operation.</summary>
+    public static Expression<int> LeftShift<T>(Column<T> col, int bits) where T : struct
+        => new($"({col.FullName} << {bits})");
+
+    /// <summary>Right shift operation.</summary>
+    public static Expression<int> RightShift<T>(Column<T> col, int bits) where T : struct
+        => new($"({col.FullName} >> {bits})");
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Helper
@@ -436,4 +651,36 @@ public class WithinGroupBuilder
     }
 
     public string Build() => $"ORDER BY {string.Join(", ", _orderBy)}";
+}
+
+/// <summary>
+/// Hash algorithms supported by SQL Server HASHBYTES function.
+/// </summary>
+public enum HashAlgorithm
+{
+    MD2,
+    MD4,
+    MD5,
+    SHA,
+    SHA1,
+    SHA2_256,
+    SHA2_512
+}
+
+/// <summary>
+/// Extensions for HashAlgorithm enum.
+/// </summary>
+public static class HashAlgorithmExtensions
+{
+    public static string ToSql(this HashAlgorithm algorithm) => algorithm switch
+    {
+        HashAlgorithm.MD2 => "MD2",
+        HashAlgorithm.MD4 => "MD4",
+        HashAlgorithm.MD5 => "MD5",
+        HashAlgorithm.SHA => "SHA",
+        HashAlgorithm.SHA1 => "SHA1",
+        HashAlgorithm.SHA2_256 => "SHA2_256",
+        HashAlgorithm.SHA2_512 => "SHA2_512",
+        _ => throw new ArgumentOutOfRangeException(nameof(algorithm))
+    };
 }

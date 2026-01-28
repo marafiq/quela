@@ -2045,6 +2045,221 @@ class Program
         });
 
         // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 29: SQL Server Advanced Features
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── SQL Server Advanced Features ──");
+
+        RunTest("TableHint_NoLock_GeneratesWithNoLock", () =>
+        {
+            var query = Sql.From(ProductsTable.WithHint(TableHints.NoLock))
+                .Select(Products.Id, Products.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "WITH (NOLOCK)");
+        });
+
+        RunTest("TableHint_Multiple_GeneratesMultipleHints", () =>
+        {
+            var query = Sql.From(ProductsTable.WithHints(TableHints.NoLock, TableHints.ReadPast))
+                .Select(Products.Id, Products.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "WITH (NOLOCK, READPAST)");
+        });
+
+        RunTest("TableHint_WithIndex_GeneratesIndexHint", () =>
+        {
+            var query = Sql.From(ProductsTable.WithIndex("IX_Products_Name"))
+                .Select(Products.Id, Products.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "WITH (INDEX(IX_Products_Name))");
+        });
+
+        RunTest("GroupByRollup_GeneratesRollupSyntax", () =>
+        {
+            var query = Sql.From(OrderItemsTable)
+                .GroupByRollup(OrderItems.ProductId, OrderItems.OrderId)
+                .Select(OrderItems.ProductId, OrderItems.OrderId, Fn.Sum(OrderItems.Amount).As("Total"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "GROUP BY ROLLUP([OrderItems].[ProductId], [OrderItems].[OrderId])");
+        });
+
+        RunTest("GroupByCube_GeneratesCubeSyntax", () =>
+        {
+            var query = Sql.From(OrderItemsTable)
+                .GroupByCube(OrderItems.ProductId, OrderItems.OrderId)
+                .Select(OrderItems.ProductId, OrderItems.OrderId, Fn.Sum(OrderItems.Amount).As("Total"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "GROUP BY CUBE([OrderItems].[ProductId], [OrderItems].[OrderId])");
+        });
+
+        RunTest("GroupBySets_GeneratesGroupingSetsSyntax", () =>
+        {
+            var query = Sql.From(OrderItemsTable)
+                .GroupBySets(
+                    new IGroupable[] { OrderItems.ProductId, OrderItems.OrderId },
+                    new IGroupable[] { OrderItems.ProductId })
+                .Select(OrderItems.ProductId, OrderItems.OrderId, Fn.Sum(OrderItems.Amount).As("Total"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "GROUPING SETS");
+        });
+
+        RunTest("Grouping_Function_GeneratesGroupingSyntax", () =>
+        {
+            var query = Sql.From(OrderItemsTable)
+                .GroupByRollup(OrderItems.ProductId)
+                .Select(OrderItems.ProductId, Fn.Sum(OrderItems.Amount).As("Total"), Fn.Grouping(OrderItems.ProductId).As("IsSubtotal"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "GROUPING([OrderItems].[ProductId])");
+        });
+
+        RunTest("ForJsonAuto_GeneratesForJsonSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Products.Name, Products.Price)
+                .ForJsonAuto();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FOR JSON AUTO");
+        });
+
+        RunTest("ForJsonPath_WithOptions_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Products.Name)
+                .ForJsonPath(includeNullValues: true, root: "products", withoutArrayWrapper: false);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FOR JSON PATH", "INCLUDE_NULL_VALUES", "ROOT('products')");
+        });
+
+        RunTest("ForXmlAuto_GeneratesForXmlSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Products.Name, Products.Price)
+                .ForXmlAuto();
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FOR XML AUTO");
+        });
+
+        RunTest("ForXmlPath_WithRoot_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Products.Name)
+                .ForXmlPath("Product", "Products");
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FOR XML PATH('Product')", "ROOT('Products')");
+        });
+
+        RunTest("ForXmlRaw_GeneratesForXmlRawSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Products.Name)
+                .ForXmlRaw("Row", elements: true);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FOR XML RAW('Row')", "ELEMENTS");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // SECTION 30: Advanced Function Tests
+        // ═══════════════════════════════════════════════════════════════════════════
+        Console.WriteLine("\n── Advanced Function Tests ──");
+
+        RunTest("TrigFunctions_GenerateCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(
+                    Fn.Sin(Products.Price).As("SinPrice"),
+                    Fn.Cos(Products.Price).As("CosPrice"),
+                    Fn.Tan(Products.Price).As("TanPrice"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "SIN([Products].[Price])", "COS([Products].[Price])", "TAN([Products].[Price])");
+        });
+
+        RunTest("StringFunctions_Soundex_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Name, Fn.Soundex(Products.Name).As("SoundexCode"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "SOUNDEX([Products].[Name])");
+        });
+
+        RunTest("TypeConversion_Cast_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Fn.Cast<decimal, string>(Products.Price, "VARCHAR(20)").As("PriceString"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "CAST([Products].[Price] AS VARCHAR(20))");
+        });
+
+        RunTest("TypeConversion_TryCast_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Fn.TryCast<string, int>(Products.Name, "INT").As("NameAsInt"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "TRY_CAST([Products].[Name] AS INT)");
+        });
+
+        RunTest("TypeConversion_ConvertWithStyle_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(OrdersTable)
+                .Select(Orders.Id, Fn.Convert<DateTime, string>("VARCHAR(10)", Orders.OrderDate, 101).As("DateString"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "CONVERT(VARCHAR(10), [Orders].[OrderDate], 101)");
+        });
+
+        RunTest("FullTextSearch_Contains_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Where(Fn.Contains(Products.Name, "widget"))
+                .Select(Products.Id, Products.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "CONTAINS([Products].[Name], N'widget')");
+        });
+
+        RunTest("FullTextSearch_Freetext_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Where(Fn.Freetext(Products.Name, "electronic devices"))
+                .Select(Products.Id, Products.Name);
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "FREETEXT([Products].[Name], N'electronic devices')");
+        });
+
+        RunTest("BitwiseOperations_GenerateCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(
+                    Products.CategoryId,
+                    Fn.BitwiseAnd(Products.CategoryId, 0xFF).As("LowByte"),
+                    Fn.BitwiseOr(Products.CategoryId, 0x100).As("WithFlag"),
+                    Fn.BitwiseXor(Products.CategoryId, 0x55).As("Xored"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "& 255)", "| 256)", "^ 85)");
+        });
+
+        RunTest("HashBytes_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Name, Fn.HashBytes(HashAlgorithm.SHA2_256, Products.Name).As("NameHash"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "HASHBYTES('SHA2_256', [Products].[Name])");
+        });
+
+        RunTest("JsonModify_GeneratesCorrectSyntax", () =>
+        {
+            var jsonCol = new Column<string>("Products", "JsonData");
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Id, Fn.JsonModify(jsonCol, "$.name", "NewName").As("ModifiedJson"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "JSON_MODIFY([Products].[JsonData], N'$.name', N'NewName')");
+        });
+
+        RunTest("Translate_GeneratesCorrectSyntax", () =>
+        {
+            var query = Sql.From(ProductsTable)
+                .Select(Products.Name, Fn.Translate(Products.Name, "abc", "xyz").As("Translated"));
+            var sql = query.ToSql();
+            SqlValidator.AssertContains(sql, "TRANSLATE([Products].[Name], N'abc', N'xyz')");
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
         // Print Summary
         // ═══════════════════════════════════════════════════════════════════════════
         Console.WriteLine();

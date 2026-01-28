@@ -11,4 +11,19 @@ public interface IGroupBy<T> : IOrderBy<T>
     /// Adds GROUP BY clause with specified columns.
     /// </summary>
     IHaving<T> GroupBy(params IGroupable[] columns);
+
+    /// <summary>
+    /// Adds GROUP BY with ROLLUP for hierarchical subtotals.
+    /// </summary>
+    IHaving<T> GroupByRollup(params IGroupable[] columns);
+
+    /// <summary>
+    /// Adds GROUP BY with CUBE for all combinations of subtotals.
+    /// </summary>
+    IHaving<T> GroupByCube(params IGroupable[] columns);
+
+    /// <summary>
+    /// Adds GROUP BY with GROUPING SETS for custom grouping combinations.
+    /// </summary>
+    IHaving<T> GroupBySets(params IGroupable[][] sets);
 }
