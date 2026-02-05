@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Quela - Partial Validation</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e4e4e4;
+            padding: 40px;
+        }
+        .container { max-width: 600px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 30px; }
+        header h1 {
+            font-size: 2rem;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        header p { color: #888; }
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .panel h2 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: #00d4ff;
+        }
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.85rem;
+        }
+        .status-indicator { display: flex; align-items: center; gap: 8px; }
+        .status-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #4ade80;
+            box-shadow: 0 0 10px #4ade80;
+        }
+        .form-group { margin-bottom: 20px; }
+        .form-group label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #ccc;
+        }
+        .form-group label .valid-badge {
+            color: #4ade80;
+            font-size: 0.8rem;
+        }
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+        }
+        .form-group textarea { min-height: 100px; resize: vertical; }
+        .form-group .error {
+            color: #ff6b6b;
+            font-size: 0.85rem;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .form-group .error::before { content: "⚠"; }
+        .form-group.is-invalid input,
+        .form-group.is-invalid textarea {
+            border-color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.05);
+        }
+        .form-group.is-valid input,
+        .form-group.is-valid textarea {
+            border-color: #4ade80;
+            background: rgba(74, 222, 128, 0.05);
+        }
+        .char-count {
+            text-align: right;
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 6px;
+        }
+        button {
+            width: 100%;
+            padding: 14px 24px;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            opacity: 0.5;
+        }
+        .progress-bar {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+        }
+        .progress-bar .label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+        }
+        .progress-bar .bar {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            width: 50%;
+            background: linear-gradient(90deg, #4ade80, #00d4ff);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Quela Reactive Orchestration</h1>
+            <p>Form Validation Demo - Partial State</p>
+        </header>
+        
+        <div class="panel">
+            <h2>Contact Form</h2>
+            
+            <div class="status-bar">
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span>Connected</span>
+                </div>
+                <span>Session: 9da7b86e...</span>
+            </div>
+
+            <div class="progress-bar">
+                <div class="label">
+                    <span>Form Completion</span>
+                    <span style="color: #fbbf24;">2 of 4 fields valid</span>
+                </div>
+                <div class="bar">
+                    <div class="fill"></div>
+                </div>
+            </div>
+
+            <form>
+                <div class="form-group is-valid">
+                    <label>
+                        Name
+                        <span class="valid-badge">✓ Valid</span>
+                    </label>
+                    <input type="text" value="John Smith">
+                </div>
+
+                <div class="form-group is-valid">
+                    <label>
+                        Email
+                        <span class="valid-badge">✓ Valid</span>
+                    </label>
+                    <input type="email" value="john.smith@example.com">
+                </div>
+
+                <div class="form-group is-invalid">
+                    <label>Subject</label>
+                    <input type="text" placeholder="Enter subject" value="">
+                    <div class="error">Subject is required</div>
+                </div>
+
+                <div class="form-group is-invalid">
+                    <label>Message</label>
+                    <textarea placeholder="Enter your message">Hello</textarea>
+                    <div class="char-count">5 characters (minimum 10 required)</div>
+                    <div class="error">Message must be at least 10 characters</div>
+                </div>
+
+                <button type="submit" disabled>Send Message</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
