@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Quela Orchestrator - Full Control Demo</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            padding: 30px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 25px; }
+        header h1 {
+            font-size: 1.8rem;
+            color: #58a6ff;
+            margin-bottom: 8px;
+        }
+        header p { color: #8b949e; font-size: 0.95rem; }
+        .highlight { 
+            background: linear-gradient(90deg, #f97316, #eab308);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: bold;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        .panel h2 {
+            font-size: 1rem;
+            color: #58a6ff;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #30363d;
+        }
+        .form-field {
+            margin-bottom: 15px;
+        }
+        .form-field label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: #8b949e;
+            margin-bottom: 6px;
+        }
+        .form-field .badge {
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .badge.valid { background: #238636; color: white; }
+        .badge.invalid { background: #da3633; color: white; }
+        .form-field input, .form-field textarea {
+            width: 100%;
+            padding: 10px;
+            background: #0d1117;
+            border: 2px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            font-size: 0.9rem;
+        }
+        .form-field.valid input, .form-field.valid textarea { border-color: #238636; }
+        .form-field.invalid input, .form-field.invalid textarea { border-color: #da3633; }
+        .form-field .error {
+            color: #f85149;
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
+        .form-field textarea { min-height: 70px; resize: none; }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #238636;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button:disabled { opacity: 0.5; background: #30363d; }
+        
+        .orchestrator-panel { }
+        .flow-section {
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .flow-section h3 {
+            font-size: 0.85rem;
+            color: #f0883e;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .flow-section h3::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            background: #f0883e;
+            border-radius: 50%;
+        }
+        
+        .changeset-input {
+            background: #161b22;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Monaco', monospace;
+            font-size: 0.75rem;
+            margin-bottom: 10px;
+        }
+        .changeset-input .label { color: #7ee787; margin-bottom: 5px; }
+        .json-key { color: #79c0ff; }
+        .json-string { color: #a5d6ff; }
+        .json-number { color: #f0883e; }
+        
+        .arrow-down {
+            text-align: center;
+            color: #f0883e;
+            font-size: 1.5rem;
+            margin: 8px 0;
+        }
+        
+        .execution-graph {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .graph-node {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .node-executed { background: #238636; color: white; }
+        .node-pending { background: #30363d; color: #8b949e; }
+        .node-dirty { background: #9e6a03; color: white; }
+        
+        .patches-list {
+            font-family: 'Monaco', monospace;
+            font-size: 0.7rem;
+        }
+        .patch-item {
+            background: #161b22;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-left: 3px solid #a371f7;
+        }
+        .patch-target { color: #a371f7; }
+        .patch-op { color: #7ee787; }
+        .patch-value { color: #79c0ff; }
+        
+        .transaction-info {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .tx-stat {
+            background: #161b22;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .tx-stat .value {
+            font-size: 1.2rem;
+            color: #58a6ff;
+            font-weight: bold;
+        }
+        .tx-stat .label {
+            font-size: 0.7rem;
+            color: #8b949e;
+            margin-top: 4px;
+        }
+        
+        .orchestrator-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(90deg, #f97316, #eab308);
+            color: #000;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Quela Reactive Orchestration Runtime</h1>
+            <p>The <span class="highlight">BACKEND ORCHESTRATOR</span> controls all UI state, validation, and effects</p>
+        </header>
+        
+        <div class="grid">
+            <div class="panel">
+                <h2>UI (Controlled by Orchestrator)</h2>
+                
+                <div class="form-field valid">
+                    <label>Name <span class="badge valid">PATCHED</span></label>
+                    <input type="text" value="John Smith">
+                </div>
+                
+                <div class="form-field valid">
+                    <label>Email <span class="badge valid">PATCHED</span></label>
+                    <input type="email" value="john@example.com">
+                </div>
+                
+                <div class="form-field invalid">
+                    <label>Subject <span class="badge invalid">PATCHED</span></label>
+                    <input type="text" value="">
+                    <div class="error">← Error from orchestrator</div>
+                </div>
+                
+                <div class="form-field invalid">
+                    <label>Message <span class="badge invalid">PATCHED</span></label>
+                    <textarea>Hi</textarea>
+                    <div class="error">← Min 10 chars (from orchestrator)</div>
+                </div>
+                
+                <button disabled>Send Message (Disabled by Orchestrator)</button>
+            </div>
+            
+            <div class="panel orchestrator-panel">
+                <h2>Backend Orchestrator Processing</h2>
+                
+                <div class="orchestrator-badge">ORCHESTRATOR CONTROLS EVERYTHING</div>
+                
+                <div class="flow-section">
+                    <h3>1. Receive Changeset from Client</h3>
+                    <div class="changeset-input">
+                        <div class="label">→ POST /api/quela/sessions/{id}/changesets</div>
+                        <span class="json-key">"changes"</span>: [
+                          { <span class="json-key">"nodeId"</span>: <span class="json-string">"name"</span>, <span class="json-key">"value"</span>: <span class="json-string">"John Smith"</span> },
+                          { <span class="json-key">"nodeId"</span>: <span class="json-string">"message"</span>, <span class="json-key">"value"</span>: <span class="json-string">"Hi"</span> }
+                        ]
+                    </div>
+                </div>
+                
+                <div class="arrow-down">▼</div>
+                
+                <div class="flow-section">
+                    <h3>2. Execute Reactive Graph (Topological Order)</h3>
+                    <div class="execution-graph">
+                        <span class="graph-node node-dirty">name ●</span>
+                        <span class="graph-node node-executed">→</span>
+                        <span class="graph-node node-dirty">message ●</span>
+                        <span class="graph-node node-executed">→</span>
+                        <span class="graph-node node-executed">messageLength</span>
+                        <span class="graph-node node-executed">→</span>
+                        <span class="graph-node node-executed">isFormValid</span>
+                        <span class="graph-node node-executed">→</span>
+                        <span class="graph-node node-pending">submit</span>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #8b949e;">
+                        ● Dirty nodes trigger recomputation of dependents
+                    </div>
+                </div>
+                
+                <div class="arrow-down">▼</div>
+                
+                <div class="flow-section">
+                    <h3>3. Generate UI Patches (Orchestrator → Client)</h3>
+                    <div class="patches-list">
+                        <div class="patch-item">
+                            <span class="patch-target">#name</span> 
+                            <span class="patch-op">SetValid</span> 
+                            <span class="patch-value">{ valid: true }</span>
+                        </div>
+                        <div class="patch-item">
+                            <span class="patch-target">#message</span> 
+                            <span class="patch-op">SetValid</span> 
+                            <span class="patch-value">{ valid: false, error: "Min 10 chars" }</span>
+                        </div>
+                        <div class="patch-item">
+                            <span class="patch-target">#message-length</span> 
+                            <span class="patch-op">SetValue</span> 
+                            <span class="patch-value">2</span>
+                        </div>
+                        <div class="patch-item">
+                            <span class="patch-target">#submit-btn</span> 
+                            <span class="patch-op">SetEnabled</span> 
+                            <span class="patch-value">false</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="transaction-info">
+                    <div class="tx-stat">
+                        <div class="value">Committed</div>
+                        <div class="label">TX Status</div>
+                    </div>
+                    <div class="tx-stat">
+                        <div class="value">4</div>
+                        <div class="label">Patches Sent</div>
+                    </div>
+                    <div class="tx-stat">
+                        <div class="value">5</div>
+                        <div class="label">Nodes Executed</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

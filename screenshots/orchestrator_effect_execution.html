@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Quela Orchestrator - Effect Execution</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            padding: 30px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 25px; }
+        header h1 { font-size: 1.6rem; color: #58a6ff; margin-bottom: 8px; }
+        header p { color: #8b949e; }
+        .highlight { 
+            background: linear-gradient(90deg, #a371f7, #f97316);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: bold;
+        }
+        
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+        .timeline::before {
+            content: "";
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(180deg, #238636, #58a6ff, #a371f7, #f97316);
+        }
+        
+        .step {
+            position: relative;
+            margin-bottom: 25px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        .step::before {
+            content: "";
+            position: absolute;
+            left: -24px;
+            top: 25px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #58a6ff;
+            border: 2px solid #0d1117;
+        }
+        .step.effect::before { background: #a371f7; }
+        .step.result::before { background: #238636; }
+        
+        .step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .step-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+        .step-title.trigger { color: #f97316; }
+        .step-title.compute { color: #58a6ff; }
+        .step-title.effect { color: #a371f7; }
+        .step-title.result { color: #238636; }
+        
+        .step-badge {
+            font-size: 0.7rem;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .badge-orchestrator { background: #f97316; color: #000; }
+        .badge-effect { background: #a371f7; color: #fff; }
+        .badge-complete { background: #238636; color: #fff; }
+        
+        .step-content {
+            background: #0d1117;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Monaco', monospace;
+            font-size: 0.75rem;
+        }
+        .key { color: #79c0ff; }
+        .string { color: #a5d6ff; }
+        .number { color: #f0883e; }
+        .bool-true { color: #7ee787; }
+        .bool-false { color: #f85149; }
+        
+        .patches-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .patch-card {
+            background: #21262d;
+            border-radius: 6px;
+            padding: 10px;
+            border-left: 3px solid #a371f7;
+        }
+        .patch-card .target { color: #a371f7; font-weight: 600; }
+        .patch-card .op { color: #7ee787; }
+        
+        .summary-box {
+            background: linear-gradient(135deg, #238636 0%, #2ea043 100%);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .summary-box h3 {
+            color: white;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+        .summary-stats {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+        }
+        .stat {
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: white;
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.8);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Orchestrator-Controlled Effect Execution</h1>
+            <p>The <span class="highlight">BACKEND ORCHESTRATOR</span> manages the entire submit flow</p>
+        </header>
+        
+        <div class="timeline">
+            <div class="step">
+                <div class="step-header">
+                    <span class="step-title trigger">1. User Clicks Submit → Orchestrator Receives Action</span>
+                    <span class="step-badge badge-orchestrator">ORCHESTRATOR</span>
+                </div>
+                <div class="step-content">
+                    <span class="key">"actions"</span>: [{ <span class="key">"actionId"</span>: <span class="string">"submit"</span> }]<br>
+                    → Orchestrator checks: isFormValid == <span class="bool-true">true</span> ✓
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-header">
+                    <span class="step-title compute">2. Orchestrator Schedules Effect Node</span>
+                    <span class="step-badge badge-orchestrator">ORCHESTRATOR</span>
+                </div>
+                <div class="step-content">
+                    Graph execution: submit (trigger) → <strong>submitForm (effect)</strong><br>
+                    Dependencies resolved: name, email, subject, message ✓
+                </div>
+            </div>
+            
+            <div class="step effect">
+                <div class="step-header">
+                    <span class="step-title effect">3. Orchestrator Executes Effect with Retry Policy</span>
+                    <span class="step-badge badge-effect">EFFECT RUNTIME</span>
+                </div>
+                <div class="step-content">
+                    <span class="key">Effect</span>: submitForm<br>
+                    <span class="key">Retry Policy</span>: 3 attempts, exponential backoff<br>
+                    <span class="key">Timeout</span>: 30 seconds<br>
+                    <span class="key">Idempotency Key</span>: tx-abc123<br><br>
+                    → Calling external API...<br>
+                    → Response: { <span class="key">"ticketId"</span>: <span class="string">"TKT-2026-XYZ"</span> }
+                </div>
+            </div>
+            
+            <div class="step result">
+                <div class="step-header">
+                    <span class="step-title result">4. Orchestrator Commits Transaction & Sends UI Patches</span>
+                    <span class="step-badge badge-complete">COMMITTED</span>
+                </div>
+                <div class="step-content">
+                    Transaction committed (seq: 7)<br><br>
+                    <strong>UI Patches Generated by Orchestrator:</strong>
+                </div>
+                <div class="patches-grid">
+                    <div class="patch-card">
+                        <div class="target">#form</div>
+                        <div class="op">SetVisible → false</div>
+                    </div>
+                    <div class="patch-card">
+                        <div class="target">#success-card</div>
+                        <div class="op">SetVisible → true</div>
+                    </div>
+                    <div class="patch-card">
+                        <div class="target">#ticket-id</div>
+                        <div class="op">SetText → "TKT-2026-XYZ"</div>
+                    </div>
+                    <div class="patch-card">
+                        <div class="target">#submit-btn</div>
+                        <div class="op">SetEnabled → false</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="summary-box">
+            <h3>Orchestrator Controls the Entire Flow</h3>
+            <div class="summary-stats">
+                <div class="stat">
+                    <div class="stat-value">1</div>
+                    <div class="stat-label">Effect Executed</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">4</div>
+                    <div class="stat-label">UI Patches</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">7</div>
+                    <div class="stat-label">Tx Sequence</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">Client Logic</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
