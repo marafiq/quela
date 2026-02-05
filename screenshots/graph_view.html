@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quela Reactive Graph Analysis</title>
+    <style>
+        body { 
+            font-family: 'Monaco', 'Consolas', monospace; 
+            background: #0d1117; 
+            color: #c9d1d9; 
+            padding: 30px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        h1 { 
+            color: #58a6ff; 
+            font-size: 24px;
+        }
+        .graph-container {
+            display: flex;
+            gap: 30px;
+        }
+        .graph {
+            flex: 1;
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        h2 {
+            color: #58a6ff;
+            font-size: 16px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #30363d;
+            padding-bottom: 10px;
+        }
+        .node {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            background: #21262d;
+            border-radius: 6px;
+        }
+        .node-type {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .type-value { background: #238636; color: white; }
+        .type-computed { background: #1f6feb; color: white; }
+        .type-trigger { background: #f85149; color: white; }
+        .type-effect { background: #a371f7; color: white; }
+        .node-name { flex: 1; }
+        .node-deps { color: #8b949e; font-size: 12px; }
+        .topo-order {
+            margin-top: 20px;
+            padding: 15px;
+            background: #21262d;
+            border-radius: 8px;
+        }
+        .topo-title {
+            color: #f0883e;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        .topo-flow {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        .topo-node {
+            background: #30363d;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .arrow { color: #58a6ff; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .stat {
+            background: #21262d;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 28px;
+            color: #58a6ff;
+            font-weight: bold;
+        }
+        .stat-label {
+            color: #8b949e;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>REACTIVE DEPENDENCY GRAPH - contact-form</h1>
+    </div>
+
+    <div class="graph-container">
+        <div class="graph">
+            <h2>Graph Nodes</h2>
+            <div class="node">
+                <span class="node-type type-value">VALUE</span>
+                <span class="node-name">name</span>
+                <span class="node-deps">deps: none</span>
+            </div>
+            <div class="node">
+                <span class="node-type type-value">VALUE</span>
+                <span class="node-name">email</span>
+                <span class="node-deps">deps: none</span>
+            </div>
+            <div class="node">
+                <span class="node-type type-value">VALUE</span>
+                <span class="node-name">subject</span>
+                <span class="node-deps">deps: none</span>
+            </div>
+            <div class="node">
+                <span class="node-type type-value">VALUE</span>
+                <span class="node-name">message</span>
+                <span class="node-deps">deps: none</span>
+            </div>
+            <div class="node">
+                <span class="node-type type-computed">COMPUTED</span>
+                <span class="node-name">messageLength</span>
+                <span class="node-deps">deps: message</span>
+            </div>
+            <div class="node">
+                <span class="node-type type-computed">COMPUTED</span>
+                <span class="node-name">isFormValid</span>
+                <span class="node-deps">deps: name, email, subject, message</span>
+            </div>
+            <div class="node">
+                <span class="node-type type-trigger">TRIGGER</span>
+                <span class="node-name">submit</span>
+                <span class="node-deps">deps: isFormValid</span>
+            </div>
+            <div class="node">
+                <span class="node-type type-effect">EFFECT</span>
+                <span class="node-name">submitForm</span>
+                <span class="node-deps">deps: submit, name, email, subject, message</span>
+            </div>
+        </div>
+
+        <div class="graph" style="flex: 0.8;">
+            <h2>Execution Analysis</h2>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-value">8</div>
+                    <div class="stat-label">Total Nodes</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">11</div>
+                    <div class="stat-label">Edges</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">4</div>
+                    <div class="stat-label">Max Depth</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">8</div>
+                    <div class="stat-label">Critical Path</div>
+                </div>
+            </div>
+            
+            <div class="topo-order">
+                <div class="topo-title">Topological Execution Order</div>
+                <div class="topo-flow">
+                    <span class="topo-node">name</span>
+                    <span class="arrow">→</span>
+                    <span class="topo-node">email</span>
+                    <span class="arrow">→</span>
+                    <span class="topo-node">subject</span>
+                    <span class="arrow">→</span>
+                    <span class="topo-node">message</span>
+                    <span class="arrow">→</span>
+                    <span class="topo-node">messageLength</span>
+                    <span class="arrow">→</span>
+                    <span class="topo-node">isFormValid</span>
+                    <span class="arrow">→</span>
+                    <span class="topo-node">submit</span>
+                    <span class="arrow">→</span>
+                    <span class="topo-node">submitForm</span>
+                </div>
+            </div>
+
+            <div class="topo-order" style="margin-top: 15px;">
+                <div class="topo-title">Wave-Based Parallel Scheduling</div>
+                <div style="font-size: 13px; line-height: 1.8;">
+                    <div><strong style="color: #58a6ff;">Wave 0:</strong> name, email, subject, message (parallel)</div>
+                    <div><strong style="color: #58a6ff;">Wave 1:</strong> messageLength, isFormValid (parallel)</div>
+                    <div><strong style="color: #58a6ff;">Wave 2:</strong> submit</div>
+                    <div><strong style="color: #58a6ff;">Wave 3:</strong> submitForm (effect)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

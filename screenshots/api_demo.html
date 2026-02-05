@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quela API Demo Results</title>
+    <style>
+        body { 
+            font-family: 'Monaco', 'Consolas', monospace; 
+            background: #1a1a2e; 
+            color: #e4e4e4; 
+            padding: 30px;
+            line-height: 1.6;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(90deg, #00d4ff22, #7b2cbf22);
+            border-radius: 12px;
+        }
+        h1 { 
+            color: #00d4ff; 
+            font-size: 28px;
+            margin: 0;
+        }
+        .subtitle {
+            color: #888;
+            margin-top: 10px;
+        }
+        .test {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .test-title {
+            color: #00d4ff;
+            font-size: 18px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .badge {
+            background: #4ade80;
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .endpoint {
+            background: rgba(0,0,0,0.3);
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .method { color: #4ade80; }
+        pre {
+            background: rgba(0,0,0,0.4);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 13px;
+            border-left: 3px solid #7b2cbf;
+        }
+        .key { color: #00d4ff; }
+        .string { color: #4ade80; }
+        .number { color: #f59e0b; }
+        .bool { color: #f472b6; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>QUELA REACTIVE ORCHESTRATION RUNTIME</h1>
+        <div class="subtitle">API Demo Results - Proof of Working System</div>
+    </div>
+
+    <div class="test">
+        <div class="test-title"><span class="badge">PASS</span> Test 1: Health Check</div>
+        <div class="endpoint"><span class="method">GET</span> /api/health</div>
+        <pre><span class="key">"status"</span>: <span class="string">"ok"</span>,
+<span class="key">"timestamp"</span>: <span class="string">"2026-02-05T05:22:16.739Z"</span></pre>
+    </div>
+
+    <div class="test">
+        <div class="test-title"><span class="badge">PASS</span> Test 2: Orchestration Registry</div>
+        <div class="endpoint"><span class="method">GET</span> /api/quela/orchestrations</div>
+        <pre>[{
+  <span class="key">"id"</span>: <span class="string">"contact-form"</span>,
+  <span class="key">"name"</span>: <span class="string">"Contact Form"</span>,
+  <span class="key">"version"</span>: <span class="string">"1.0.0"</span>,
+  <span class="key">"nodeCount"</span>: <span class="number">8</span>
+}]</pre>
+    </div>
+
+    <div class="test">
+        <div class="test-title"><span class="badge">PASS</span> Test 3: Session Creation</div>
+        <div class="endpoint"><span class="method">POST</span> /api/quela/sessions</div>
+        <pre>{
+  <span class="key">"sessionId"</span>: <span class="string">"9da7b86e9ce841fc853c7c383e47158d"</span>,
+  <span class="key">"orchestrationId"</span>: <span class="string">"contact-form"</span>,
+  <span class="key">"createdAt"</span>: <span class="number">1770268914967</span>
+}</pre>
+    </div>
+
+    <div class="test">
+        <div class="test-title"><span class="badge">PASS</span> Test 4: Reactive Changeset (Partial)</div>
+        <div class="endpoint"><span class="method">POST</span> /api/quela/sessions/{id}/changesets - Input: name="Alice Smith"</div>
+        <pre>{
+  <span class="key">"status"</span>: <span class="string">"Committed"</span>,
+  <span class="key">"patches"</span>: [
+    {<span class="key">"target"</span>:<span class="string">"#name"</span>, <span class="key">"operation"</span>:<span class="string">"SetValid"</span>, <span class="key">"value"</span>:{<span class="key">"valid"</span>:<span class="bool">true</span>}},
+    {<span class="key">"target"</span>:<span class="string">"#message-length"</span>, <span class="key">"operation"</span>:<span class="string">"SetValue"</span>, <span class="key">"value"</span>:<span class="number">0</span>},
+    {<span class="key">"target"</span>:<span class="string">"#submit-btn"</span>, <span class="key">"operation"</span>:<span class="string">"SetValue"</span>, <span class="key">"value"</span>:<span class="bool">false</span>}
+  ],
+  <span class="key">"availableActions"</span>: []
+}</pre>
+    </div>
+
+    <div class="test">
+        <div class="test-title"><span class="badge">PASS</span> Test 5: Reactive Changeset (Complete Form)</div>
+        <div class="endpoint"><span class="method">POST</span> /api/quela/sessions/{id}/changesets - All fields filled</div>
+        <pre>{
+  <span class="key">"status"</span>: <span class="string">"Committed"</span>,
+  <span class="key">"patches"</span>: [
+    {<span class="key">"target"</span>:<span class="string">"#name"</span>, <span class="key">"operation"</span>:<span class="string">"SetValid"</span>, <span class="key">"value"</span>:{<span class="key">"valid"</span>:<span class="bool">true</span>}},
+    {<span class="key">"target"</span>:<span class="string">"#email"</span>, <span class="key">"operation"</span>:<span class="string">"SetValid"</span>, <span class="key">"value"</span>:{<span class="key">"valid"</span>:<span class="bool">true</span>}},
+    {<span class="key">"target"</span>:<span class="string">"#subject"</span>, <span class="key">"operation"</span>:<span class="string">"SetValid"</span>, <span class="key">"value"</span>:{<span class="key">"valid"</span>:<span class="bool">true</span>}},
+    {<span class="key">"target"</span>:<span class="string">"#message"</span>, <span class="key">"operation"</span>:<span class="string">"SetValid"</span>, <span class="key">"value"</span>:{<span class="key">"valid"</span>:<span class="bool">true</span>}},
+    {<span class="key">"target"</span>:<span class="string">"#message-length"</span>, <span class="key">"operation"</span>:<span class="string">"SetValue"</span>, <span class="key">"value"</span>:<span class="number">133</span>},
+    {<span class="key">"target"</span>:<span class="string">"#submit-btn"</span>, <span class="key">"operation"</span>:<span class="string">"SetValue"</span>, <span class="key">"value"</span>:<span class="bool">true</span>}
+  ],
+  <span class="key">"availableActions"</span>: [<span class="string">"submit"</span>]
+}</pre>
+    </div>
+</body>
+</html>
