@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Island Conductor POC — Signals + Syncfusion</title>
+    <!-- Syncfusion EJ2: single bundle for all styles + script -->
+    <link href="https://cdn.syncfusion.com/ej2/material.css" rel="stylesheet">
+    <script src="https://cdn.syncfusion.com/ej2/dist/ej2.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+        .field { margin-bottom: 16px; }
+        .field label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 14px; }
+        .region-hidden { display: none; }
+        .error { color: #d32f2f; font-size: 12px; margin-top: 4px; min-height: 16px; }
+        h1 { font-size: 20px; }
+        h2 { font-size: 16px; color: #666; margin-top: 32px; }
+        #trace { background: #1e1e1e; color: #0f0; font-family: monospace; font-size: 11px; padding: 12px; max-height: 300px; overflow-y: auto; margin-top: 24px; border-radius: 4px; }
+        #trace div { padding: 1px 0; }
+        #payload-output { background: #f5f5f5; padding: 12px; font-family: monospace; font-size: 12px; white-space: pre; border-radius: 4px; margin-top: 8px; min-height: 20px; }
+        .btn-row { margin-top: 16px; display: flex; gap: 8px; }
+    </style>
+</head>
+<body>
+
+<h1>Island Conductor POC</h1>
+<p><code>@preact/signals-core</code> → Plan JSON → Syncfusion EJ2 controls</p>
+
+<div class="field">
+    <label>Facility</label>
+    <input id="ej_FacilityId" type="text" />
+    <div id="error_FacilityId" class="error"></div>
+</div>
+
+<div class="field">
+    <label>Unit</label>
+    <input id="ej_UnitId" type="text" />
+</div>
+
+<div class="field">
+    <label>Payer Type</label>
+    <input id="ej_PayerType" type="text" />
+</div>
+
+<div id="region_MedicaidSection" data-region="MedicaidSection" class="region-hidden">
+    <div class="field">
+        <label>Medicaid Number</label>
+        <input id="ej_MedicaidNumber" type="text" />
+        <div id="error_MedicaidNumber" class="error"></div>
+    </div>
+</div>
+
+<div class="btn-row">
+    <button id="btnValidate" class="e-btn e-primary">Validate</button>
+    <button id="btnCollect" class="e-btn">Collect Payload</button>
+</div>
+<div id="payload-output"></div>
+
+<h2>Trace Log</h2>
+<div id="trace"></div>
+
+<script type="application/json" id="plan">
+{
+    "islandId": "residentForm",
+    "fields": {
+        "FacilityId":     { "domId": "ej_FacilityId",     "control": "DropDownList" },
+        "UnitId":         { "domId": "ej_UnitId",         "control": "DropDownList" },
+        "PayerType":      { "domId": "ej_PayerType",      "control": "DropDownList" },
+        "MedicaidNumber": { "domId": "ej_MedicaidNumber", "control": "TextBox" }
+    },
+    "regions": {
+        "MedicaidSection": {
+            "domId": "region_MedicaidSection",
+            "visibleWhen": { "field": "PayerType", "equals": "Medicaid" },
+            "fields": ["MedicaidNumber"]
+        }
+    },
+    "rules": [
+        {
+            "id": "cascade_units",
+            "trigger": { "type": "change", "field": "FacilityId" },
+            "effects": [
+                { "type": "clearField", "target": "UnitId" },
+                { "type": "disableField", "target": "UnitId" },
+                { "type": "loadDataSource", "target": "UnitId", "lane": "cascade_units" }
+            ]
+        }
+    ],
+    "validation": {
+        "FacilityId":     [{ "type": "notEmpty", "message": "Facility is required" }],
+        "MedicaidNumber": [{ "type": "notEmpty", "message": "Medicaid # is required", "when": "MedicaidSection" }]
+    }
+}
+</script>
+
+<script>
+// ═══ VENDORED @preact/signals-core (MIT, Preact Team) ═══
+var BRAND=Symbol.for("preact-signals"),RUNNING=1,NOTIFIED=2,OUTDATED=4,DISPOSED=8,HAS_ERROR=16,TRACKING=32;var evalContext,batchedEffect,batchDepth=0,batchIteration=0,globalVersion=0;function startBatch(){batchDepth++}function endBatch(){if(batchDepth>1){batchDepth--;return}var e,h=!1;while(batchedEffect!==void 0){var t=batchedEffect;batchedEffect=void 0;batchIteration++;while(t!==void 0){var n=t._nextBatchedEffect;t._nextBatchedEffect=void 0;t._flags&=~NOTIFIED;if(!(t._flags&DISPOSED)&&needsToRecompute(t)){try{t._callback()}catch(r){if(!h){e=r;h=!0}}}t=n}}batchIteration=0;batchDepth--;if(h)throw e}function batch(fn){if(batchDepth>0)return fn();startBatch();try{return fn()}finally{endBatch()}}function untracked(fn){var p=evalContext;evalContext=void 0;try{return fn()}finally{evalContext=p}}function addDependency(s){if(evalContext===void 0)return;var n=s._node;if(n===void 0||n._target!==evalContext){n={_version:0,_source:s,_prevSource:evalContext._sources,_nextSource:void 0,_target:evalContext,_prevTarget:void 0,_nextTarget:void 0,_rollbackNode:n};if(evalContext._sources!==void 0)evalContext._sources._nextSource=n;evalContext._sources=n;s._node=n;if(evalContext._flags&TRACKING)s._subscribe(n);return n}else if(n._version===-1){n._version=0;if(n._nextSource!==void 0){n._nextSource._prevSource=n._prevSource;if(n._prevSource!==void 0)n._prevSource._nextSource=n._nextSource;n._prevSource=evalContext._sources;n._nextSource=void 0;evalContext._sources._nextSource=n;evalContext._sources=n}return n}}function Signal(v){this._value=v;this._version=0;this._node=void 0;this._targets=void 0}Signal.prototype.brand=BRAND;Signal.prototype._refresh=function(){return!0};Signal.prototype._subscribe=function(n){var t=this._targets;if(t!==n&&n._prevTarget===void 0){n._nextTarget=t;this._targets=n;if(t!==void 0)t._prevTarget=n}};Signal.prototype._unsubscribe=function(n){if(this._targets!==void 0){var p=n._prevTarget,x=n._nextTarget;if(p!==void 0){p._nextTarget=x;n._prevTarget=void 0}if(x!==void 0){x._prevTarget=p;n._nextTarget=void 0}if(n===this._targets)this._targets=x}};Signal.prototype.subscribe=function(fn){var self=this;return effect(function(){var v=self.value;var p=evalContext;evalContext=void 0;try{fn(v)}finally{evalContext=p}})};Signal.prototype.peek=function(){var p=evalContext;evalContext=void 0;try{return this.value}finally{evalContext=p}};Object.defineProperty(Signal.prototype,"value",{get:function(){var n=addDependency(this);if(n!==void 0)n._version=this._version;return this._value},set:function(v){if(v!==this._value){if(batchIteration>100)throw new Error("Cycle detected");this._value=v;this._version++;globalVersion++;startBatch();try{var n=this._targets;while(n!==void 0){n._target._notify();n=n._nextTarget}}finally{endBatch()}}}});function signal(v){return new Signal(v)}function needsToRecompute(t){var n=t._sources;while(n!==void 0){if(n._source._version!==n._version||!n._source._refresh()||n._source._version!==n._version)return!0;n=n._nextSource}return!1}function prepareSources(t){var n=t._sources;while(n!==void 0){var r=n._source._node;if(r!==void 0)n._rollbackNode=r;n._source._node=n;n._version=-1;if(n._nextSource===void 0){t._sources=n;break}n=n._nextSource}}function cleanupSources(t){var n=t._sources,h;while(n!==void 0){var p=n._prevSource;if(n._version===-1){n._source._unsubscribe(n);if(p!==void 0)p._nextSource=n._nextSource;if(n._nextSource!==void 0)n._nextSource._prevSource=p}else{h=n}n._source._node=n._rollbackNode;if(n._rollbackNode!==void 0)n._rollbackNode=void 0;n=p}t._sources=h}function Computed(fn){Signal.call(this,void 0);this._fn=fn;this._sources=void 0;this._globalVersion=globalVersion-1;this._flags=OUTDATED}Computed.prototype=Object.create(Signal.prototype);Computed.prototype._refresh=function(){this._flags&=~NOTIFIED;if(this._flags&RUNNING)return!1;if((this._flags&(OUTDATED|TRACKING))===TRACKING)return!0;this._flags&=~OUTDATED;if(this._globalVersion===globalVersion)return!0;this._globalVersion=globalVersion;this._flags|=RUNNING;if(this._version>0&&!needsToRecompute(this)){this._flags&=~RUNNING;return!0}var p=evalContext;try{prepareSources(this);evalContext=this;var v=this._fn();if((this._flags&HAS_ERROR)||this._value!==v||this._version===0){this._value=v;this._flags&=~HAS_ERROR;this._version++}}catch(e){this._value=e;this._flags|=HAS_ERROR;this._version++}evalContext=p;cleanupSources(this);this._flags&=~RUNNING;return!0};Computed.prototype._subscribe=function(n){if(this._targets===void 0){this._flags|=OUTDATED|TRACKING;var d=this._sources;while(d!==void 0){d._source._subscribe(d);d=d._nextSource}}Signal.prototype._subscribe.call(this,n)};Computed.prototype._unsubscribe=function(n){if(this._targets!==void 0){Signal.prototype._unsubscribe.call(this,n);if(this._targets===void 0){this._flags&=~TRACKING;var d=this._sources;while(d!==void 0){d._source._unsubscribe(d);d=d._nextSource}}}};Computed.prototype._notify=function(){if(!(this._flags&NOTIFIED)){this._flags|=OUTDATED|NOTIFIED;var n=this._targets;while(n!==void 0){n._target._notify();n=n._nextTarget}}};Object.defineProperty(Computed.prototype,"value",{get:function(){if(this._flags&RUNNING)throw new Error("Cycle detected");var n=addDependency(this);this._refresh();if(n!==void 0)n._version=this._version;if(this._flags&HAS_ERROR)throw this._value;return this._value}});function computed(fn){return new Computed(fn)}function cleanupEffect(e){var c=e._cleanup;e._cleanup=void 0;if(typeof c==="function"){startBatch();var p=evalContext;evalContext=void 0;try{c()}catch(r){e._flags&=~RUNNING;e._flags|=DISPOSED;disposeEffect(e);throw r}finally{evalContext=p;endBatch()}}}function disposeEffect(e){var n=e._sources;while(n!==void 0){n._source._unsubscribe(n);n=n._nextSource}e._fn=void 0;e._sources=void 0;cleanupEffect(e)}function endEffect(prev,self){if(evalContext!==self)throw new Error("Out-of-order effect");cleanupSources(self);evalContext=prev;self._flags&=~RUNNING;if(self._flags&DISPOSED)disposeEffect(self);endBatch()}function Effect(fn){this._fn=fn;this._cleanup=void 0;this._sources=void 0;this._nextBatchedEffect=void 0;this._flags=TRACKING}Effect.prototype._callback=function(){var f=this._start();try{if(this._flags&DISPOSED||this._fn===void 0)return;var c=this._fn();if(typeof c==="function")this._cleanup=c}finally{f()}};Effect.prototype._start=function(){if(this._flags&RUNNING)throw new Error("Cycle detected");this._flags|=RUNNING;this._flags&=~DISPOSED;cleanupEffect(this);prepareSources(this);startBatch();var prev=evalContext;var self=this;evalContext=this;return function(){endEffect(prev,self)}};Effect.prototype._notify=function(){if(!(this._flags&NOTIFIED)){this._flags|=NOTIFIED;this._nextBatchedEffect=batchedEffect;batchedEffect=this}};Effect.prototype._dispose=function(){this._flags|=DISPOSED;if(!(this._flags&RUNNING))disposeEffect(this)};function effect(fn){var e=new Effect(fn);try{e._callback()}catch(r){e._dispose();throw r}return function(){e._dispose()}}
+
+// ═══ ISLAND CONDUCTOR RUNTIME ═══
+
+var traceEl = document.getElementById('trace');
+function trace(msg) {
+    var d = document.createElement('div');
+    d.textContent = '[' + new Date().toISOString().substr(11,12) + '] ' + msg;
+    traceEl.appendChild(d);
+    traceEl.scrollTop = traceEl.scrollHeight;
+    console.log('[IC]', msg);
+}
+
+// Fake server data for cascade demo
+var FAKE_UNITS = {
+    'F1': [{ text: 'Unit 101', value: 'U101' }, { text: 'Unit 102', value: 'U102' }],
+    'F2': [{ text: 'Unit 201', value: 'U201' }, { text: 'Unit 202', value: 'U202' }, { text: 'Unit 203', value: 'U203' }],
+    'F3': [{ text: 'Unit 301', value: 'U301' }],
+};
+
+function mountIsland(plan) {
+    var fields = {};
+    var controls = {};
+    var regions = {};
+    var disposers = [];
+    var abortMap = {};
+
+    trace('window.ej = ' + typeof window.ej);
+    trace('window.ej.dropdowns = ' + typeof (window.ej && window.ej.dropdowns));
+    trace('window.ej.inputs = ' + typeof (window.ej && window.ej.inputs));
+
+    // ── Step 1: Create signals ──
+    for (var name in plan.fields) {
+        fields[name] = signal(null);
+        trace('signal: ' + name);
+    }
+
+    // ── Step 2: Init Syncfusion + bidirectional binding ──
+    for (var name in plan.fields) {
+        var def = plan.fields[name];
+        var el = document.getElementById(def.domId);
+        if (!el) { trace('ERROR: #' + def.domId + ' not found'); continue; }
+
+        if (def.control === 'DropDownList') {
+            (function(fieldName) {
+                var ddl = new ej.dropdowns.DropDownList({
+                    placeholder: 'Select ' + fieldName + '...',
+                    change: function(e) {
+                        trace('EJ2→signal: ' + fieldName + ' = ' + JSON.stringify(e.value));
+                        fields[fieldName].value = e.value;
+                    }
+                });
+                ddl.appendTo(el);
+                controls[fieldName] = ddl;
+                trace('EJ2 DropDownList: #' + def.domId);
+            })(name);
+
+        } else if (def.control === 'TextBox') {
+            (function(fieldName) {
+                var tb = new ej.inputs.TextBox({
+                    placeholder: 'Enter ' + fieldName + '...',
+                    input: function(e) {
+                        fields[fieldName].value = e.value;
+                    }
+                });
+                tb.appendTo(el);
+                controls[fieldName] = tb;
+                trace('EJ2 TextBox: #' + def.domId);
+            })(name);
+        }
+    }
+
+    // ── Step 3: Seed data ──
+    controls['FacilityId'].dataSource = [
+        { text: 'Sunrise Manor', value: 'F1' },
+        { text: 'Oak Park',      value: 'F2' },
+        { text: 'Riverside',     value: 'F3' },
+    ];
+    controls['FacilityId'].fields = { text: 'text', value: 'value' };
+    controls['FacilityId'].dataBind();
+
+    controls['PayerType'].dataSource = [
+        { text: 'Private',  value: 'Private' },
+        { text: 'Medicaid', value: 'Medicaid' },
+        { text: 'Medicare', value: 'Medicare' },
+    ];
+    controls['PayerType'].fields = { text: 'text', value: 'value' };
+    controls['PayerType'].dataBind();
+
+    controls['UnitId'].fields = { text: 'text', value: 'value' };
+    controls['UnitId'].enabled = false;
+
+    // ── Step 4: Regions ──
+    for (var regionName in plan.regions) {
+        (function(rName, rDef) {
+            var depField = fields[rDef.visibleWhen.field];
+            var targetValue = rDef.visibleWhen.equals;
+
+            regions[rName] = computed(function() {
+                return depField.value === targetValue;
+            });
+
+            disposers.push(effect(function() {
+                var visible = regions[rName].value;
+                var el = document.getElementById(rDef.domId);
+                if (el) el.classList.toggle('region-hidden', !visible);
+                trace('region ' + rName + ': ' + (visible ? 'SHOW' : 'HIDE'));
+
+                if (!visible && rDef.fields) {
+                    for (var i = 0; i < rDef.fields.length; i++) {
+                        var errEl = document.getElementById('error_' + rDef.fields[i]);
+                        if (errEl) errEl.textContent = '';
+                    }
+                }
+            }));
+        })(regionName, plan.regions[regionName]);
+    }
+
+    // ── Step 5: Rules ──
+    for (var ri = 0; ri < plan.rules.length; ri++) {
+        (function(rule) {
+            var triggerField = fields[rule.trigger.field];
+            var firstRun = true;
+
+            disposers.push(effect(function() {
+                var val = triggerField.value;
+                if (firstRun) { firstRun = false; return; }
+                if (val === null) return;
+
+                trace('rule[' + rule.id + ']: ' + rule.trigger.field + ' → ' + JSON.stringify(val));
+
+                for (var fi = 0; fi < rule.effects.length; fi++) {
+                    var fx = rule.effects[fi];
+                    switch (fx.type) {
+                        case 'clearField':
+                            fields[fx.target].value = null;
+                            if (controls[fx.target]) {
+                                controls[fx.target].value = null;
+                                controls[fx.target].text = '';
+                                controls[fx.target].dataBind();
+                            }
+                            trace('  clear: ' + fx.target);
+                            break;
+
+                        case 'disableField':
+                            if (controls[fx.target]) controls[fx.target].enabled = false;
+                            trace('  disable: ' + fx.target);
+                            break;
+
+                        case 'loadDataSource':
+                            (function(lane, targetName) {
+                                if (abortMap[lane]) {
+                                    abortMap[lane].abort();
+                                    trace('  abort previous: ' + lane);
+                                }
+                                var ctrl = new AbortController();
+                                abortMap[lane] = ctrl;
+                                var fid = untracked(function() { return triggerField.value; });
+                                trace('  fetch: units for ' + fid);
+
+                                setTimeout(function() {
+                                    if (ctrl.signal.aborted) {
+                                        trace('  ✗ stale: ' + fid);
+                                        return;
+                                    }
+                                    var data = FAKE_UNITS[fid] || [];
+                                    trace('  ✓ loaded: ' + data.length + ' units for ' + fid);
+                                    controls[targetName].dataSource = data;
+                                    controls[targetName].enabled = data.length > 0;
+                                    controls[targetName].dataBind();
+                                }, 400);
+                            })(fx.lane, fx.target);
+                            break;
+                    }
+                }
+            }));
+        })(plan.rules[ri]);
+    }
+
+    // ── Validate ──
+    function validate() {
+        var errors = [];
+        for (var fieldName in plan.validation) {
+            var rules = plan.validation[fieldName];
+            var fieldErr = null;
+
+            for (var i = 0; i < rules.length; i++) {
+                var rule = rules[i];
+                if (rule.when) {
+                    var regionVisible = untracked(function() {
+                        return regions[rule.when] ? regions[rule.when].value : false;
+                    });
+                    if (!regionVisible) {
+                        trace('validate skip: ' + fieldName + ' (' + rule.when + ' hidden)');
+                        continue;
+                    }
+                }
+                var val = untracked(function() { return fields[fieldName].value; });
+                if (rule.type === 'notEmpty' && (!val || val === '')) {
+                    fieldErr = rule.message;
+                    errors.push({ field: fieldName, message: rule.message });
+                }
+            }
+            var errEl = document.getElementById('error_' + fieldName);
+            if (errEl) errEl.textContent = fieldErr || '';
+        }
+        trace('validate: ' + (errors.length === 0 ? '✓ PASS' : '✗ ' + errors.map(function(e) { return e.field; }).join(', ')));
+        return errors;
+    }
+
+    // ── Collect payload ──
+    function collectPayload() {
+        var payload = {};
+        for (var fieldName in plan.fields) {
+            var regionName = null;
+            for (var rn in plan.regions) {
+                var rd = plan.regions[rn];
+                if (rd.fields && rd.fields.indexOf(fieldName) >= 0) { regionName = rn; break; }
+            }
+            if (regionName) {
+                var visible = untracked(function() { return regions[regionName].value; });
+                if (!visible) {
+                    trace('collect skip: ' + fieldName + ' (hidden)');
+                    continue;
+                }
+            }
+            (function(fn) {
+                payload[fn] = untracked(function() { return fields[fn].value; });
+            })(fieldName);
+        }
+        trace('payload: ' + JSON.stringify(payload));
+        return payload;
+    }
+
+    // ── Buttons ──
+    document.getElementById('btnValidate').onclick = function() { trace('── VALIDATE ──'); validate(); };
+    document.getElementById('btnCollect').onclick = function() {
+        trace('── COLLECT ──');
+        document.getElementById('payload-output').textContent = JSON.stringify(collectPayload(), null, 2);
+    };
+
+    trace('✓ Island "' + plan.islandId + '" mounted');
+    return { fields: fields, controls: controls, regions: regions, validate: validate, collectPayload: collectPayload };
+}
+
+// ── Boot ──
+document.addEventListener('DOMContentLoaded', function() {
+    var plan = JSON.parse(document.getElementById('plan').textContent);
+    window.__island = mountIsland(plan);
+});
+</script>
+
+</body>
+</html>
