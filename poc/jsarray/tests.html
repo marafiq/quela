@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JsArray DSL — Spec Compliance Tests</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 960px; margin: 0 auto; padding: 20px; color: #222; }
+        h1 { font-size: 22px; margin-bottom: 4px; }
+        .subtitle { color: #666; font-size: 13px; margin: 0 0 24px; }
+        .summary { display: flex; gap: 16px; margin-bottom: 20px; padding: 12px 16px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+        .summary.all-pass { background: #e8f5e9; color: #2e7d32; }
+        .summary.has-fail { background: #ffebee; color: #c62828; }
+        .summary span { display: inline-block; }
+        .test { border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
+        .test-header { display: flex; align-items: center; padding: 10px 14px; cursor: pointer; user-select: none; }
+        .test-header:hover { background: #fafafa; }
+        .test-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-right: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge-pass { background: #c8e6c9; color: #2e7d32; }
+        .badge-fail { background: #ffcdd2; color: #c62828; }
+        .test-title { font-weight: 600; font-size: 14px; flex: 1; }
+        .test-section { font-size: 11px; color: #999; }
+        .test-body { display: none; border-top: 1px solid #e0e0e0; }
+        .test.open .test-body { display: block; }
+        .code-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+        .code-col { padding: 10px 14px; }
+        .code-col:first-child { border-right: 1px solid #e0e0e0; background: #fafbfc; }
+        .code-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #999; margin-bottom: 4px; letter-spacing: 0.5px; }
+        pre { margin: 0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+        .exec-row { padding: 10px 14px; border-top: 1px solid #e0e0e0; background: #f5f5f5; }
+        .exec-row pre { color: #1565c0; }
+        .mismatch { background: #fff3e0; }
+        .mismatch pre { color: #e65100; }
+    </style>
+</head>
+<body>
+
+<h1>JsArray&lt;T&gt; DSL — Spec Compliance Tests</h1>
+<p class="subtitle">Shalimar Foundation DSL · C# phantom types → JavaScript array methods · All 12 spec examples</p>
+
+<div id="summary" class="summary"></div>
+<div id="results"></div>
+
+<script src="transpiler.js"></script>
+<script>
+(function() {
+    'use strict';
+    var T = window.JsArrayTranspiler;
+    var results = [];
+
+    // ── Test data (simulates runtime objects) ───────────────────────────
+    var residents = [
+        { id: 1, name: 'Alice',   isActive: true,  facilityId: 'F1', amount: 100 },
+        { id: 2, name: 'Bob',     isActive: false, facilityId: 'F2', amount: 200 },
+        { id: 3, name: 'Charlie', isActive: true,  facilityId: 'F1', amount: 150 },
+        { id: 4, name: 'Diana',   isActive: true,  facilityId: 'F2', amount: 300 },
+    ];
+    var items = residents; // alias for reduce example
+    var selectedId = 3;
+    var targetId = 2;
+    var currentFacility = 'F1';
+    var pendingChanges = [];
+    var args = { data: { id: 5, name: 'Eve' }, rowIndex: 1 };
+
+    // Fake DOM objects for execution
+    var statusLabel = { innerText: '' };
+    var submitBtn = { disabled: true };
+    var residentGrid = {
+        dataSource: null,
+        selectRow: function(idx) { this._selectedRow = idx; },
+        getSelectedRecords: function() { return residents.slice(0, 2); },
+        getSelectedRowIndexes: function() { return [0, 2]; },
+        _selectedRow: -1,
+    };
+
+    // ── Test runner ─────────────────────────────────────────────────────
+    function runTest(spec) {
+        var csharp = spec.csharp;
+        var ast = spec.ast;
+        var expectedJs = spec.expectedJs;
+
+        // Step 1: Transpile AST → JS string
+        var actualJs = T.transpile(ast);
+
+        // Step 2: Normalize for comparison (trim whitespace lines)
+        var normExpected = normalizeJs(expectedJs);
+        var normActual = normalizeJs(actualJs);
+        var transpileMatch = normExpected === normActual;
+
+        // Step 3: Execute the generated JS and capture the result
+        var execResult, execError;
+        try {
+            // Reset state
+            statusLabel.innerText = '';
+            submitBtn.disabled = true;
+            residentGrid.dataSource = null;
+            residentGrid._selectedRow = -1;
+            pendingChanges = [];
+
+            execResult = new Function(
+                'residents', 'items', 'selectedId', 'targetId', 'currentFacility',
+                'pendingChanges', 'args', 'statusLabel', 'submitBtn', 'residentGrid',
+                actualJs + (spec.returnExpr ? '\nreturn ' + spec.returnExpr + ';' : '')
+            )(residents, items, selectedId, targetId, currentFacility,
+              pendingChanges, args, statusLabel, submitBtn, residentGrid);
+
+            if (spec.verify) {
+                var verifyResult = spec.verify(execResult, { statusLabel: statusLabel, submitBtn: submitBtn, residentGrid: residentGrid, pendingChanges: pendingChanges });
+                if (verifyResult !== true) {
+                    execError = 'Verify failed: ' + verifyResult;
+                }
+            }
+        } catch (e) {
+            execError = e.message;
+        }
+
+        var pass = transpileMatch && !execError;
+
+        results.push({
+            id: spec.id,
+            title: spec.title,
+            csharp: csharp,
+            expectedJs: expectedJs,
+            actualJs: actualJs,
+            transpileMatch: transpileMatch,
+            execResult: execResult,
+            execError: execError,
+            pass: pass,
+        });
+    }
+
+    function normalizeJs(s) {
+        return s.replace(/\s+/g, ' ').replace(/;\s*/g, ';').trim();
+    }
+
+    // ═══ SPEC EXAMPLES ══════════════════════════════════════════════════
+
+    // 5.1 Filter
+    runTest({
+        id: '5.1', title: 'Filter',
+        csharp: 'var active = residents.Filter(r => r.IsActive);\nGrid.DataSource = active;',
+        ast: [
+            T.varDecl('active', T.call(T.id('residents'), 'Filter', [
+                T.lambda(['r'], T.member(T.id('r'), 'IsActive'))
+            ])),
+            T.stmt(T.assign(T.member(T.id('Grid'), 'DataSource'), T.id('active'))),
+        ],
+        expectedJs: "var active = residents.filter(function(r) { return r.isActive; });\nresidentGrid.dataSource = active;",
+        returnExpr: 'active',
+        verify: function(result, ctx) {
+            if (!Array.isArray(result)) return 'not an array';
+            if (result.length !== 3) return 'expected 3 active, got ' + result.length;
+            if (ctx.residentGrid.dataSource !== result) return 'dataSource not set';
+            return true;
+        }
+    });
+
+    // 5.2 Map
+    runTest({
+        id: '5.2', title: 'Map',
+        csharp: 'var names = residents.Map(r => r.Name);',
+        ast: [
+            T.varDecl('names', T.call(T.id('residents'), 'Map', [
+                T.lambda(['r'], T.member(T.id('r'), 'Name'))
+            ])),
+        ],
+        expectedJs: "var names = residents.map(function(r) { return r.name; });",
+        returnExpr: 'names',
+        verify: function(result) {
+            if (!Array.isArray(result)) return 'not an array';
+            var expected = ['Alice', 'Bob', 'Charlie', 'Diana'];
+            if (result.join(',') !== expected.join(',')) return 'expected ' + expected + ' got ' + result;
+            return true;
+        }
+    });
+
+    // 5.3 Filter + Map Chain
+    runTest({
+        id: '5.3', title: 'Filter + Map Chain',
+        csharp: 'var activeNames = residents\n    .Filter(r => r.IsActive)\n    .Map(r => r.Name);',
+        ast: [
+            T.varDecl('activeNames', T.call(
+                T.call(T.id('residents'), 'Filter', [
+                    T.lambda(['r'], T.member(T.id('r'), 'IsActive'))
+                ]),
+                'Map', [
+                    T.lambda(['r'], T.member(T.id('r'), 'Name'))
+                ]
+            )),
+        ],
+        expectedJs: "var activeNames = residents.filter(function(r) { return r.isActive; }).map(function(r) { return r.name; });",
+        returnExpr: 'activeNames',
+        verify: function(result) {
+            var expected = ['Alice', 'Charlie', 'Diana'];
+            if (result.join(',') !== expected.join(',')) return 'expected ' + expected + ' got ' + result;
+            return true;
+        }
+    });
+
+    // 5.4 Find
+    runTest({
+        id: '5.4', title: 'Find',
+        csharp: 'var found = residents.Find(r => r.Id == selectedId);\nStatusLabel.InnerText = found.Name;',
+        ast: [
+            T.varDecl('found', T.call(T.id('residents'), 'Find', [
+                T.lambda(['r'], T.binary('==', T.member(T.id('r'), 'Id'), T.id('selectedId')))
+            ])),
+            T.stmt(T.assign(T.member(T.id('StatusLabel'), 'InnerText'), T.member(T.id('found'), 'Name'))),
+        ],
+        expectedJs: "var found = residents.find(function(r) { return r.id === selectedId; });\nstatusLabel.innerText = found.name;",
+        returnExpr: 'found',
+        verify: function(result, ctx) {
+            if (!result || result.id !== 3) return 'expected id=3, got ' + JSON.stringify(result);
+            if (ctx.statusLabel.innerText !== 'Charlie') return 'innerText should be Charlie, got ' + ctx.statusLabel.innerText;
+            return true;
+        }
+    });
+
+    // 5.5 FindIndex
+    runTest({
+        id: '5.5', title: 'FindIndex',
+        csharp: 'var idx = residents.FindIndex(r => r.Id == targetId);\nGrid.SelectRow(idx);',
+        ast: [
+            T.varDecl('idx', T.call(T.id('residents'), 'FindIndex', [
+                T.lambda(['r'], T.binary('==', T.member(T.id('r'), 'Id'), T.id('targetId')))
+            ])),
+            T.stmt(T.call(T.id('Grid'), 'SelectRow', [T.id('idx')])),
+        ],
+        expectedJs: "var idx = residents.findIndex(function(r) { return r.id === targetId; });\nresidentGrid.selectRow(idx);",
+        returnExpr: 'idx',
+        verify: function(result, ctx) {
+            if (result !== 1) return 'expected index 1, got ' + result;
+            if (ctx.residentGrid._selectedRow !== 1) return 'selectRow not called with 1';
+            return true;
+        }
+    });
+
+    // 5.6 Some / Every
+    runTest({
+        id: '5.6', title: 'Some / Every',
+        csharp: 'var hasActive = residents.Some(r => r.IsActive);\nvar allActive = residents.Every(r => r.IsActive);\n\nif (hasActive)\n    SubmitBtn.Disabled = false;\nelse\n    SubmitBtn.Disabled = true;',
+        ast: [
+            T.varDecl('hasActive', T.call(T.id('residents'), 'Some', [
+                T.lambda(['r'], T.member(T.id('r'), 'IsActive'))
+            ])),
+            T.varDecl('allActive', T.call(T.id('residents'), 'Every', [
+                T.lambda(['r'], T.member(T.id('r'), 'IsActive'))
+            ])),
+            T.ifElse(T.id('hasActive'),
+                T.block([T.stmt(T.assign(T.member(T.id('SubmitBtn'), 'Disabled'), T.lit(false)))]),
+                T.block([T.stmt(T.assign(T.member(T.id('SubmitBtn'), 'Disabled'), T.lit(true)))])
+            ),
+        ],
+        expectedJs: "var hasActive = residents.some(function(r) { return r.isActive; });\nvar allActive = residents.every(function(r) { return r.isActive; });\nif (hasActive) {\n    submitBtn.disabled = false;\n} else {\n    submitBtn.disabled = true;\n}",
+        verify: function(result, ctx) {
+            if (ctx.submitBtn.disabled !== false) return 'submitBtn.disabled should be false (hasActive=true)';
+            return true;
+        }
+    });
+
+    // 5.7 Reduce
+    runTest({
+        id: '5.7', title: 'Reduce',
+        csharp: 'var total = items.Reduce((sum, item) => sum + item.Amount, 0);\nStatusLabel.InnerText = "Total: $" + total;',
+        ast: [
+            T.varDecl('total', T.call(T.id('items'), 'Reduce', [
+                T.lambda(['sum', 'item'], T.binary('+', T.id('sum'), T.member(T.id('item'), 'Amount'))),
+                T.lit(0),
+            ])),
+            T.stmt(T.assign(T.member(T.id('StatusLabel'), 'InnerText'),
+                T.binary('+', T.lit('Total: $'), T.id('total'))
+            )),
+        ],
+        expectedJs: "var total = items.reduce(function(sum, item) { return sum + item.amount; }, 0);\nstatusLabel.innerText = 'Total: $' + total;",
+        returnExpr: 'total',
+        verify: function(result, ctx) {
+            if (result !== 750) return 'expected 750, got ' + result;
+            if (ctx.statusLabel.innerText !== 'Total: $750') return 'innerText should be "Total: $750", got ' + ctx.statusLabel.innerText;
+            return true;
+        }
+    });
+
+    // 5.8 Sort with Comparer
+    runTest({
+        id: '5.8', title: 'Sort with Comparer',
+        csharp: 'var sorted = residents.Sort((a, b) => a.Name.LocaleCompare(b.Name));\nGrid.DataSource = sorted;',
+        ast: [
+            T.varDecl('sorted', T.call(T.id('residents'), 'Sort', [
+                T.lambda(['a', 'b'],
+                    T.call(T.member(T.id('a'), 'Name'), 'LocaleCompare', [T.member(T.id('b'), 'Name')])
+                )
+            ])),
+            T.stmt(T.assign(T.member(T.id('Grid'), 'DataSource'), T.id('sorted'))),
+        ],
+        expectedJs: "var sorted = residents.sort(function(a, b) { return a.name.localeCompare(b.name); });\nresidentGrid.dataSource = sorted;",
+        returnExpr: 'sorted',
+        verify: function(result) {
+            // sort is in-place, but result should be alphabetical
+            if (result[0].name !== 'Alice') return 'first should be Alice, got ' + result[0].name;
+            if (result[3].name !== 'Diana') return 'last should be Diana, got ' + result[3].name;
+            return true;
+        }
+    });
+
+    // 5.9 Join
+    runTest({
+        id: '5.9', title: 'Filter + Map + Join chain',
+        csharp: 'var csv = residents\n    .Filter(r => r.FacilityId == currentFacility)\n    .Map(r => r.Name)\n    .Join(", ");\nStatusLabel.InnerText = csv;',
+        ast: [
+            T.varDecl('csv', T.call(
+                T.call(
+                    T.call(T.id('residents'), 'Filter', [
+                        T.lambda(['r'], T.binary('==', T.member(T.id('r'), 'FacilityId'), T.id('currentFacility')))
+                    ]),
+                    'Map', [T.lambda(['r'], T.member(T.id('r'), 'Name'))]
+                ),
+                'Join', [T.lit(', ')]
+            )),
+            T.stmt(T.assign(T.member(T.id('StatusLabel'), 'InnerText'), T.id('csv'))),
+        ],
+        expectedJs: "var csv = residents.filter(function(r) { return r.facilityId === currentFacility; }).map(function(r) { return r.name; }).join(', ');\nstatusLabel.innerText = csv;",
+        returnExpr: 'csv',
+        verify: function(result, ctx) {
+            if (result !== 'Alice, Charlie') return 'expected "Alice, Charlie", got ' + result;
+            if (ctx.statusLabel.innerText !== 'Alice, Charlie') return 'innerText mismatch';
+            return true;
+        }
+    });
+
+    // 5.10 Indexer
+    runTest({
+        id: '5.10', title: 'Indexer (bracket access)',
+        csharp: 'var first = residents[0];\nvar last = residents[residents.Length - 1];',
+        ast: [
+            T.varDecl('first', T.index(T.id('residents'), T.lit(0))),
+            T.varDecl('last', T.index(T.id('residents'),
+                T.binary('-', T.member(T.id('residents'), 'Length'), T.lit(1))
+            )),
+        ],
+        expectedJs: "var first = residents[0];\nvar last = residents[residents.length - 1];",
+        returnExpr: '[first, last]',
+        verify: function(result) {
+            if (result[0].name !== 'Alice') return 'first should be Alice';
+            if (result[1].name !== 'Diana') return 'last should be Diana';
+            return true;
+        }
+    });
+
+    // 5.11 Includes / IndexOf
+    runTest({
+        id: '5.11', title: 'Includes / IndexOf',
+        csharp: 'var selected = Grid.SelectedRowIndexes;\nif (selected.Includes(args.RowIndex))\n    StatusLabel.InnerText = "Already selected";\nelse\n    Grid.SelectRow(args.RowIndex);',
+        ast: [
+            T.varDecl('selected', T.member(T.id('Grid'), 'SelectedRowIndexes')),
+            T.ifElse(
+                T.call(T.id('selected'), 'Includes', [T.member(T.id('args'), 'RowIndex')]),
+                T.block([T.stmt(T.assign(T.member(T.id('StatusLabel'), 'InnerText'), T.lit('Already selected')))]),
+                T.block([T.stmt(T.call(T.id('Grid'), 'SelectRow', [T.member(T.id('args'), 'RowIndex')]))])
+            ),
+        ],
+        expectedJs: "var selected = residentGrid.getSelectedRowIndexes();\nif (selected.includes(args.rowIndex)) {\n    statusLabel.innerText = 'Already selected';\n} else {\n    residentGrid.selectRow(args.rowIndex);\n}",
+        verify: function(result, ctx) {
+            // args.rowIndex=1 is NOT in [0,2], so selectRow should be called
+            if (ctx.residentGrid._selectedRow !== 1) return 'selectRow should be called with 1, got ' + ctx.residentGrid._selectedRow;
+            return true;
+        }
+    });
+
+    // 5.12 Mutation (Push, Splice)
+    runTest({
+        id: '5.12', title: 'Mutation (Push, Splice)',
+        csharp: 'pendingChanges.Push(args.Data);\npendingChanges.Splice(idx, 1);',
+        ast: [
+            T.stmt(T.call(T.id('pendingChanges'), 'Push', [T.member(T.id('args'), 'Data')])),
+            T.stmt(T.call(T.id('pendingChanges'), 'Splice', [T.lit(0), T.lit(1)])),
+        ],
+        expectedJs: "pendingChanges.push(args.data);\npendingChanges.splice(0, 1);",
+        verify: function(result, ctx) {
+            // push then splice(0,1) → empty
+            if (ctx.pendingChanges.length !== 0) return 'expected empty after push+splice, got length ' + ctx.pendingChanges.length;
+            return true;
+        }
+    });
+
+    // Bonus: 6. ForEach (void lambda — no return)
+    runTest({
+        id: '6', title: 'ForEach (void lambda — Action<T>)',
+        csharp: 'Grid.SelectedRecords.ForEach(r => JsConsole.Log(r.Name));',
+        ast: [
+            T.stmt(T.call(
+                T.member(T.id('Grid'), 'SelectedRecords'),
+                'ForEach', [
+                    T.lambda(['r'], T.call(T.id('JsConsole'), 'Log', [T.member(T.id('r'), 'Name')]), true)
+                ]
+            )),
+        ],
+        expectedJs: "residentGrid.getSelectedRecords().forEach(function(r) { console.log(r.name); });",
+        verify: function() {
+            // If it didn't throw, it executed correctly (console.log is side-effect)
+            return true;
+        }
+    });
+
+    // ═══ RENDER RESULTS ═════════════════════════════════════════════════
+    var container = document.getElementById('results');
+    var passCount = 0;
+    var failCount = 0;
+
+    for (var i = 0; i < results.length; i++) {
+        var r = results[i];
+        if (r.pass) passCount++; else failCount++;
+
+        var testEl = document.createElement('div');
+        testEl.className = 'test' + (i < 3 || !r.pass ? ' open' : '');
+        testEl.setAttribute('data-testid', 'test-' + r.id);
+        testEl.setAttribute('data-pass', r.pass ? 'true' : 'false');
+
+        var header = document.createElement('div');
+        header.className = 'test-header';
+        header.innerHTML =
+            '<span class="test-badge ' + (r.pass ? 'badge-pass' : 'badge-fail') + '">' +
+                (r.pass ? 'PASS' : 'FAIL') +
+            '</span>' +
+            '<span class="test-title">§' + r.id + ' — ' + r.title + '</span>' +
+            '<span class="test-section">' + (r.transpileMatch ? 'transpile ✓' : 'transpile ✗') +
+                ' · ' + (r.execError ? 'exec ✗' : 'exec ✓') + '</span>';
+
+        header.onclick = (function(el) {
+            return function() { el.classList.toggle('open'); };
+        })(testEl);
+
+        var body = document.createElement('div');
+        body.className = 'test-body';
+
+        // C# → JS comparison
+        var codeRow = document.createElement('div');
+        codeRow.className = 'code-row';
+        codeRow.innerHTML =
+            '<div class="code-col"><div class="code-label">C# (DSL Input)</div><pre>' + escHtml(r.csharp) + '</pre></div>' +
+            '<div class="code-col"><div class="code-label">Expected JS</div><pre>' + escHtml(r.expectedJs) + '</pre></div>';
+        body.appendChild(codeRow);
+
+        // Actual JS output
+        var actualRow = document.createElement('div');
+        actualRow.className = 'code-row' + (r.transpileMatch ? '' : ' mismatch');
+        actualRow.innerHTML =
+            '<div class="code-col"><div class="code-label">Transpiled JS (Actual)</div><pre>' + escHtml(r.actualJs) + '</pre></div>' +
+            '<div class="code-col"><div class="code-label">Execution Result</div><pre>' +
+                (r.execError
+                    ? '✗ ' + escHtml(r.execError)
+                    : '✓ ' + escHtml(typeof r.execResult === 'undefined' ? '(void)' : JSON.stringify(r.execResult))) +
+            '</pre></div>';
+        body.appendChild(actualRow);
+
+        testEl.appendChild(header);
+        testEl.appendChild(body);
+        container.appendChild(testEl);
+    }
+
+    // Summary
+    var summaryEl = document.getElementById('summary');
+    summaryEl.className = 'summary ' + (failCount === 0 ? 'all-pass' : 'has-fail');
+    summaryEl.innerHTML =
+        '<span>' + results.length + ' tests</span>' +
+        '<span>' + passCount + ' passed</span>' +
+        (failCount > 0 ? '<span>' + failCount + ' failed</span>' : '') +
+        '<span>' + (failCount === 0 ? '— All spec examples verified ✓' : '') + '</span>';
+
+    function escHtml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+})();
+</script>
+</body>
+</html>
