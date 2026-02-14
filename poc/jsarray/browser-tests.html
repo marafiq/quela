@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JsArray DSL — Browser Execution Tests</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 960px; margin: 0 auto; padding: 20px; color: #222; }
+        h1 { font-size: 22px; margin-bottom: 4px; }
+        .subtitle { color: #666; font-size: 13px; margin: 0 0 4px; }
+        .pipeline { font-size: 12px; color: #999; margin: 0 0 20px; font-family: monospace; }
+        .summary { display: flex; gap: 16px; margin-bottom: 20px; padding: 12px 16px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+        .summary.all-pass { background: #e8f5e9; color: #2e7d32; }
+        .summary.has-fail { background: #ffebee; color: #c62828; }
+        .test { border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 10px; overflow: hidden; }
+        .test-header { display: flex; align-items: center; padding: 10px 14px; }
+        .badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-right: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge-pass { background: #c8e6c9; color: #2e7d32; }
+        .badge-fail { background: #ffcdd2; color: #c62828; }
+        .test-title { font-weight: 600; font-size: 14px; flex: 1; }
+        .test-detail { font-size: 11px; color: #888; }
+        .test-body { border-top: 1px solid #e0e0e0; display: grid; grid-template-columns: 1fr 1fr; }
+        .code-col { padding: 10px 14px; }
+        .code-col:first-child { border-right: 1px solid #e0e0e0; background: #fafbfc; }
+        .code-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #999; margin-bottom: 4px; letter-spacing: 0.5px; }
+        pre { margin: 0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+        .result-row { border-top: 1px solid #e0e0e0; padding: 8px 14px; background: #f5f5f5; }
+        .result-row pre { color: #1565c0; }
+        .result-row.fail pre { color: #c62828; }
+    </style>
+</head>
+<body>
+
+<h1>JsArray&lt;T&gt; DSL — Browser Execution Tests</h1>
+<p class="subtitle">C# expression trees → JsExpressionVisitor → JavaScript · executed in browser</p>
+<p class="pipeline">C# Expression&lt;Func&lt;...&gt;&gt; ─→ ExpressionVisitor.Transpile() ─→ JS string ─→ browser eval() ─→ verified result</p>
+
+<div id="summary" class="summary"></div>
+<div id="results"></div>
+
+<script>
+(function() {
+    'use strict';
+
+    // ── Test data (same as spec) ────────────────────────────────────────
+    var residents = [
+        { id: 1, name: 'Alice',   isActive: true,  facilityId: 'F1', amount: 100 },
+        { id: 2, name: 'Bob',     isActive: false, facilityId: 'F2', amount: 200 },
+        { id: 3, name: 'Charlie', isActive: true,  facilityId: 'F1', amount: 150 },
+        { id: 4, name: 'Diana',   isActive: true,  facilityId: 'F2', amount: 300 },
+    ];
+    var items = residents;
+    var selectedId = 3;
+    var targetId = 2;
+    var currentFacility = 'F1';
+    var selected = [0, 1, 2];  // for Includes test
+    var rowIndex = 1;
+    var pending = [];
+    var item = { id: 5, name: 'Eve', isActive: true, facilityId: 'F3', amount: 50 };
+
+    // Capture console.log for ForEach test
+    var logged = [];
+    var origLog = console.log;
+    console.log = function() {
+        logged.push.apply(logged, arguments);
+        origLog.apply(console, arguments);
+    };
+
+    // ── Load manifest and run ───────────────────────────────────────────
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'test-manifest.json', false);  // synchronous for simplicity
+    xhr.send();
+    var manifest = JSON.parse(xhr.responseText);
+
+    var container = document.getElementById('results');
+    var passCount = 0, failCount = 0;
+
+    for (var i = 0; i < manifest.length; i++) {
+        var tc = manifest[i];
+        var execResult, execError, verifyPassed;
+
+        // Reset per-test state
+        pending = [];
+        logged = [];
+
+        try {
+            // Execute the transpiled JS
+            execResult = new Function(
+                'residents', 'items', 'selectedId', 'targetId', 'currentFacility',
+                'selected', 'rowIndex', 'pending', 'item', 'logged',
+                'return ' + tc.javaScript + ';'
+            )(
+                // Sort mutates in-place, so use a copy
+                tc.id === '5.8' ? residents.slice() : residents,
+                items, selectedId, targetId, currentFacility,
+                selected, rowIndex, pending, item, logged
+            );
+        } catch (e) {
+            execError = e.message;
+        }
+
+        // ForEach returns undefined — re-execute with logged capture
+        if (tc.id === '6') {
+            logged = [];
+            var savedLog = console.log;
+            console.log = function() { logged.push.apply(logged, arguments); };
+            try {
+                new Function(
+                    'residents', 'logged',
+                    tc.javaScript + ';'
+                )(residents, logged);
+                execResult = undefined;
+            } catch (e2) {
+                execError = e2.message;
+            }
+            console.log = savedLog;
+        }
+
+        // Verify result
+        try {
+            verifyPassed = new Function(
+                'result', 'logged',
+                'return (' + tc.verifyJs + ');'
+            )(execResult, logged);
+        } catch (e) {
+            verifyPassed = false;
+            if (!execError) execError = 'verify: ' + e.message;
+        }
+
+        var pass = !execError && verifyPassed === true;
+        if (pass) passCount++; else failCount++;
+
+        // Render
+        var testEl = document.createElement('div');
+        testEl.className = 'test';
+        testEl.setAttribute('data-testid', 'test-' + tc.id);
+        testEl.setAttribute('data-pass', pass ? 'true' : 'false');
+
+        testEl.innerHTML =
+            '<div class="test-header">' +
+                '<span class="badge ' + (pass ? 'badge-pass' : 'badge-fail') + '">' + (pass ? 'PASS' : 'FAIL') + '</span>' +
+                '<span class="test-title">\u00A7' + tc.id + ' \u2014 ' + escHtml(tc.title) + '</span>' +
+                '<span class="test-detail">' + (pass ? 'transpile \u2713 \u00B7 exec \u2713 \u00B7 verify \u2713' : (execError ? 'exec \u2717' : 'verify \u2717')) + '</span>' +
+            '</div>' +
+            '<div class="test-body">' +
+                '<div class="code-col"><div class="code-label">C# (Expression Tree)</div><pre>' + escHtml(tc.cSharp) + '</pre></div>' +
+                '<div class="code-col"><div class="code-label">Transpiled JS (from ExpressionVisitor)</div><pre>' + escHtml(tc.javaScript) + '</pre></div>' +
+            '</div>' +
+            '<div class="result-row' + (pass ? '' : ' fail') + '">' +
+                '<div class="code-label">Execution Result</div>' +
+                '<pre>' + (execError ? '\u2717 ' + escHtml(execError) : '\u2713 ' + escHtml(formatResult(execResult))) + '</pre>' +
+            '</div>';
+
+        container.appendChild(testEl);
+    }
+
+    // Summary
+    var summaryEl = document.getElementById('summary');
+    summaryEl.className = 'summary ' + (failCount === 0 ? 'all-pass' : 'has-fail');
+    summaryEl.innerHTML =
+        '<span>' + manifest.length + ' tests</span>' +
+        '<span>' + passCount + ' passed</span>' +
+        (failCount > 0 ? '<span>' + failCount + ' failed</span>' : '') +
+        '<span>' + (failCount === 0 ? '\u2014 All C# \u2192 JS transpilations execute correctly in browser \u2713' : '') + '</span>';
+
+    function escHtml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function formatResult(val) {
+        if (val === undefined) return '(void)';
+        if (typeof val === 'string') return '"' + val + '"';
+        return JSON.stringify(val);
+    }
+})();
+</script>
+</body>
+</html>

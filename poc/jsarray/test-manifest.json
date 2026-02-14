@@ -1,0 +1,107 @@
+[
+  {
+    "id": "5.1",
+    "title": "Filter",
+    "cSharp": "residents.Filter(r =\u003E r.IsActive)",
+    "javaScript": "residents.filter(function(r) { return r.isActive; })",
+    "verifyJs": "result.length === 3 \u0026\u0026 result.every(function(r) { return r.isActive; })"
+  },
+  {
+    "id": "5.2",
+    "title": "Map",
+    "cSharp": "residents.Map(r =\u003E r.Name)",
+    "javaScript": "residents.map(function(r) { return r.name; })",
+    "verifyJs": "JSON.stringify(result) === JSON.stringify([\u0027Alice\u0027,\u0027Bob\u0027,\u0027Charlie\u0027,\u0027Diana\u0027])"
+  },
+  {
+    "id": "5.3",
+    "title": "Filter \u002B Map Chain",
+    "cSharp": "residents.Filter(r =\u003E r.IsActive).Map(r =\u003E r.Name)",
+    "javaScript": "residents.filter(function(r) { return r.isActive; }).map(function(r) { return r.name; })",
+    "verifyJs": "JSON.stringify(result) === JSON.stringify([\u0027Alice\u0027,\u0027Charlie\u0027,\u0027Diana\u0027])"
+  },
+  {
+    "id": "5.4",
+    "title": "Find",
+    "cSharp": "residents.Find(r =\u003E r.Id == selectedId)",
+    "javaScript": "residents.find(function(r) { return r.id === selectedId; })",
+    "verifyJs": "result.name === \u0027Charlie\u0027 \u0026\u0026 result.id === 3"
+  },
+  {
+    "id": "5.5",
+    "title": "FindIndex",
+    "cSharp": "residents.FindIndex(r =\u003E r.Id == targetId)",
+    "javaScript": "residents.findIndex(function(r) { return r.id === targetId; })",
+    "verifyJs": "result === 1"
+  },
+  {
+    "id": "5.6a",
+    "title": "Some",
+    "cSharp": "residents.Some(r =\u003E r.IsActive)",
+    "javaScript": "residents.some(function(r) { return r.isActive; })",
+    "verifyJs": "result === true"
+  },
+  {
+    "id": "5.6b",
+    "title": "Every",
+    "cSharp": "residents.Every(r =\u003E r.IsActive)",
+    "javaScript": "residents.every(function(r) { return r.isActive; })",
+    "verifyJs": "result === false"
+  },
+  {
+    "id": "5.7",
+    "title": "Reduce",
+    "cSharp": "items.Reduce((sum, item) =\u003E sum \u002B item.Amount, 0)",
+    "javaScript": "items.reduce(function(sum, item) { return sum \u002B item.amount; }, 0)",
+    "verifyJs": "result === 750"
+  },
+  {
+    "id": "5.8",
+    "title": "Sort with Comparer",
+    "cSharp": "residents.Sort((a, b) =\u003E a.Name.LocaleCompare(b.Name))",
+    "javaScript": "residents.sort(function(a, b) { return a.name.localeCompare(b.name); })",
+    "verifyJs": "result[0].name === \u0027Alice\u0027 \u0026\u0026 result[result.length - 1].name === \u0027Diana\u0027"
+  },
+  {
+    "id": "5.9",
+    "title": "Filter \u002B Map \u002B Join",
+    "cSharp": "residents.Filter(r =\u003E r.FacilityId == currentFacility).Map(r =\u003E r.Name).Join(\u0022, \u0022)",
+    "javaScript": "residents.filter(function(r) { return r.facilityId === currentFacility; }).map(function(r) { return r.name; }).join(\u0027, \u0027)",
+    "verifyJs": "result === \u0027Alice, Charlie\u0027"
+  },
+  {
+    "id": "5.10a",
+    "title": "Indexer [0]",
+    "cSharp": "residents[0]",
+    "javaScript": "residents[0]",
+    "verifyJs": "result.name === \u0027Alice\u0027"
+  },
+  {
+    "id": "5.10b",
+    "title": "Indexer [Length - 1]",
+    "cSharp": "residents[residents.Length - 1]",
+    "javaScript": "residents[residents.length - 1]",
+    "verifyJs": "result.name === \u0027Diana\u0027"
+  },
+  {
+    "id": "5.11",
+    "title": "Includes",
+    "cSharp": "selected.Includes(rowIndex)",
+    "javaScript": "selected.includes(rowIndex)",
+    "verifyJs": "result === true"
+  },
+  {
+    "id": "5.12",
+    "title": "Push",
+    "cSharp": "pending.Push(item)",
+    "javaScript": "pending.push(item)",
+    "verifyJs": "result === 1"
+  },
+  {
+    "id": "6",
+    "title": "ForEach (void lambda)",
+    "cSharp": "residents.ForEach(r =\u003E JsConsole.Log(r.Name))",
+    "javaScript": "residents.forEach(function(r) { console.log(r.name); })",
+    "verifyJs": "logged.length === 4 \u0026\u0026 logged[0] === \u0027Alice\u0027"
+  }
+]
